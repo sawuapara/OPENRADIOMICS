@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MRI Voxel Viewer</title>
+    <link rel="icon" href="data:,">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            overflow: hidden;
+        }
+        #app {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+        }
+        #left-panel {
+            flex: 1;
+            position: relative;
+        }
+        #right-panel {
+            width: 480px;
+            background: #0d0d1a;
+            border-left: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            min-width: 280px;
+        }
+        h1 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #4fc3f7;
+        }
+        h2 {
+            font-size: 14px;
+            padding: 15px;
+            color: #4fc3f7;
+            background: rgba(0,0,0,0.3);
+            border-bottom: 1px solid #333;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #aaa;
+        }
+        select, input[type="range"] {
+            width: 100%;
+            padding: 8px;
+            border: none;
+            border-radius: 5px;
+            background: #2d2d44;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        select:focus, input[type="range"]:focus {
+            outline: 2px solid #4fc3f7;
+        }
+        input[type="range"] {
+            padding: 0;
+            height: 24px;
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            height: 8px;
+            background: #2d2d44;
+            border-radius: 4px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            background: #4fc3f7;
+            border-radius: 50%;
+            margin-top: -6px;
+            cursor: pointer;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        .slider-value {
+            float: right;
+            color: #4fc3f7;
+            font-weight: bold;
+        }
+        #status {
+            margin-top: 15px;
+            font-size: 11px;
+            color: #888;
+            white-space: pre-line;
+        }
+        #loading {
+            display: none;
+            margin-top: 10px;
+            color: #4fc3f7;
+        }
+        #loading.active {
+            display: block;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+        }
+        #info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            font-size: 12px;
+            color: #666;
+        }
+        /* Orthogonal View Panels */
+        .view-panel {
+            border-bottom: 1px solid #333;
+        }
+        .view-header {
+            font-size: 13px;
+            padding: 10px 15px;
+            color: #4fc3f7;
+            background: rgba(0,0,0,0.4);
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .view-header span {
+            font-size: 11px;
+            color: #888;
+            font-weight: normal;
+        }
+        .view-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 10px;
+        }
+        .view-canvas {
+            max-width: 100%;
+            border: 2px solid #333;
+            background: #000;
+            cursor: crosshair;
+        }
+        .view-canvas.axial {
+            max-height: 200px;
+        }
+        .view-canvas.sagittal,
+        .view-canvas.coronal {
+            max-height: 250px;
+            /* Will be scaled via CSS to correct aspect ratio */
+        }
+        .view-controls {
+            width: 100%;
+            padding: 8px 15px;
+            background: rgba(0,0,0,0.2);
+        }
+        .view-controls .control-group {
+            margin-bottom: 0;
+        }
+        /* Data Probe */
+        .data-probe {
+            width: 100%;
+            background: rgba(0,0,0,0.3);
+            font-size: 11px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+        }
+        .data-probe.expanded {
+            max-height: 300px;
+        }
+        .data-probe-content {
+            padding: 10px 15px;
+            line-height: 1.6;
+        }
+        .data-probe-content .section {
+            border-top: 1px solid #333;
+            padding-top: 6px;
+            margin-top: 6px;
+        }
+        .data-probe-content .section:first-child {
+            border-top: none;
+            padding-top: 0;
+            margin-top: 0;
+        }
+        .data-probe-content .label {
+            color: #888;
+        }
+        .data-probe-content .value {
+            color: #4fc3f7;
+        }
+        .click-hint {
+            font-size: 10px;
+            color: #555;
+            text-align: center;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="left-panel">
+            <div id="controls">
+                <h1>MRI Voxel Viewer</h1>
+
+                <div class="control-group">
+                    <label for="study">Select Study:</label>
+                    <select id="study">
+                        <option value="">-- Loading studies --</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label for="sequence">Select Sequence:</label>
+                    <select id="sequence" disabled>
+                        <option value="">-- Select a study first --</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label>
+                        Intensity Threshold:
+                        <span class="slider-value" id="threshold-value">0.15</span>
+                    </label>
+                    <input type="range" id="threshold" min="0" max="1" step="0.01" value="0.15">
+                </div>
+
+                <div id="loading">Loading volume...</div>
+                <div id="status"></div>
+            </div>
+            <div id="canvas-container"></div>
+            <div id="info">Drag to rotate • Scroll to zoom • Right-drag to pan</div>
+        </div>
+
+        <div id="right-panel">
+            <!-- AXIAL VIEW (XY plane, slice along Z) -->
+            <div class="view-panel" id="axial-panel">
+                <div class="view-header">AXIAL (Z) <span id="axial-dims"></span></div>
+                <div class="view-content">
+                    <canvas class="view-canvas" id="axial-canvas" width="256" height="256"></canvas>
+                    <div class="click-hint">Click image to probe</div>
+                </div>
+                <div class="view-controls">
+                    <div class="control-group">
+                        <label>Slice Z: <span class="slider-value" id="axial-value">0 / 0</span></label>
+                        <input type="range" id="axial-slider" min="0" max="0" step="1" value="0" disabled>
+                    </div>
+                </div>
+                <div class="data-probe" id="axial-probe">
+                    <div class="data-probe-content" id="axial-probe-content"></div>
+                </div>
+            </div>
+
+            <!-- SAGITTAL VIEW (YZ plane, slice along X) -->
+            <div class="view-panel" id="sagittal-panel">
+                <div class="view-header">SAGITTAL (X) <span id="sagittal-dims"></span></div>
+                <div class="view-content">
+                    <canvas class="view-canvas" id="sagittal-canvas" width="256" height="256"></canvas>
+                    <div class="click-hint">Click image to probe</div>
+                </div>
+                <div class="view-controls">
+                    <div class="control-group">
+                        <label>Slice X: <span class="slider-value" id="sagittal-value">0 / 0</span></label>
+                        <input type="range" id="sagittal-slider" min="0" max="0" step="1" value="0" disabled>
+                    </div>
+                </div>
+                <div class="data-probe" id="sagittal-probe">
+                    <div class="data-probe-content" id="sagittal-probe-content"></div>
+                </div>
+            </div>
+
+            <!-- CORONAL VIEW (XZ plane, slice along Y) -->
+            <div class="view-panel" id="coronal-panel">
+                <div class="view-header">CORONAL (Y) <span id="coronal-dims"></span></div>
+                <div class="view-content">
+                    <canvas class="view-canvas" id="coronal-canvas" width="256" height="256"></canvas>
+                    <div class="click-hint">Click image to probe</div>
+                </div>
+                <div class="view-controls">
+                    <div class="control-group">
+                        <label>Slice Y: <span class="slider-value" id="coronal-value">0 / 0</span></label>
+                        <input type="range" id="coronal-slider" min="0" max="0" step="1" value="0" disabled>
+                    </div>
+                </div>
+                <div class="data-probe" id="coronal-probe">
+                    <div class="data-probe-content" id="coronal-probe-content"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js ES Module imports -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        console.log('Three.js loaded:', THREE.REVISION);
+
+        // Scene setup
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+
+        const camera = new THREE.PerspectiveCamera(
+            60,
+            container.clientWidth / container.clientHeight,
+            0.1,
+            5000
+        );
+        camera.position.set(200, 200, 400);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        directionalLight.position.set(100, 100, 100);
+        scene.add(directionalLight);
+
+        const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
+        directionalLight2.position.set(-100, -100, -100);
+        scene.add(directionalLight2);
+
+        // State
+        let currentMesh = null;
+        let slicePlane = null;
+        let allVoxels = [];
+        let volumeData = null;
+        let currentStudy = null;
+        let currentSeries = null;
+        let volumeDims = { x: 0, y: 0, z: 0 };
+
+        // View configurations
+        const views = {
+            axial: { plane: 'axial', axis: 'z', canvas: null, ctx: null, slider: null },
+            sagittal: { plane: 'sagittal', axis: 'x', canvas: null, ctx: null, slider: null },
+            coronal: { plane: 'coronal', axis: 'y', canvas: null, ctx: null, slider: null }
+        };
+
+        // Initialize view elements
+        Object.keys(views).forEach(name => {
+            views[name].canvas = document.getElementById(`${name}-canvas`);
+            views[name].ctx = views[name].canvas.getContext('2d');
+            views[name].slider = document.getElementById(`${name}-slider`);
+        });
+
+        // Grayscale color mapping
+        function intensityToColor(intensity) {
+            return new THREE.Color(intensity, intensity, intensity);
+        }
+
+        // Create voxel visualization with threshold filtering
+        function createVoxels(threshold) {
+            if (!volumeData) return;
+
+            // Remove previous mesh
+            if (currentMesh) {
+                scene.remove(currentMesh);
+                currentMesh.geometry.dispose();
+                currentMesh.material.dispose();
+            }
+
+            // Filter voxels by threshold
+            const filteredVoxels = allVoxels.filter(v => v.i >= threshold);
+            const count = filteredVoxels.length;
+
+            if (count === 0) {
+                document.getElementById('status').textContent =
+                    `Dimensions: ${volumeData.dimensions.join(' × ')}\nNo voxels above threshold`;
+                return;
+            }
+
+            // Calculate spacing ratios
+            const xSpacing = volumeData.pixelSpacing[1] || 1;
+            const ySpacing = volumeData.pixelSpacing[0] || 1;
+            const zSpacing = volumeData.sliceThickness || 1;
+
+            const yScale = ySpacing / xSpacing;
+            const zScale = zSpacing / xSpacing;
+
+            const step = volumeData.step;
+
+            // Create instanced mesh
+            const geometry = new THREE.BoxGeometry(
+                step * 0.9,
+                step * 0.9 * zScale,
+                step * 0.9 * yScale
+            );
+            const material = new THREE.MeshLambertMaterial({ vertexColors: true });
+
+            const mesh = new THREE.InstancedMesh(geometry, material, count);
+
+            const dummy = new THREE.Object3D();
+
+            for (let i = 0; i < count; i++) {
+                const v = filteredVoxels[i];
+
+                dummy.position.set(
+                    v.x,
+                    v.z * zScale,
+                    v.y * yScale
+                );
+                dummy.updateMatrix();
+                mesh.setMatrixAt(i, dummy.matrix);
+
+                mesh.setColorAt(i, intensityToColor(v.i));
+            }
+
+            mesh.instanceMatrix.needsUpdate = true;
+            mesh.instanceColor.needsUpdate = true;
+
+            scene.add(mesh);
+            currentMesh = mesh;
+
+            // Store scale for slice plane
+            volumeData.zScale = zScale;
+
+            document.getElementById('status').textContent =
+                `Dimensions: ${volumeData.dimensions.join(' × ')}\n` +
+                `Spacing: ${xSpacing.toFixed(2)} × ${ySpacing.toFixed(2)} × ${zSpacing.toFixed(2)} mm\n` +
+                `Voxels: ${count.toLocaleString()}`;
+        }
+
+        // Update slice plane indicator in 3D view
+        function updateSlicePlane(sliceNum, totalSlices) {
+            if (!volumeData) return;
+
+            // Remove old plane
+            if (slicePlane) {
+                scene.remove(slicePlane);
+                slicePlane.geometry.dispose();
+                slicePlane.material.dispose();
+            }
+
+            const [nx, ny, nz] = volumeData.dimensions;
+            const zScale = volumeData.zScale || 1;
+
+            // Calculate Z position for this slice
+            const zPos = (sliceNum - nz / 2) * zScale;
+
+            // Create a semi-transparent plane
+            const planeGeom = new THREE.PlaneGeometry(nx * 1.2, ny * 1.2);
+            const planeMat = new THREE.MeshBasicMaterial({
+                color: 0x4fc3f7,
+                transparent: true,
+                opacity: 0.2,
+                side: THREE.DoubleSide
+            });
+
+            slicePlane = new THREE.Mesh(planeGeom, planeMat);
+            slicePlane.rotation.x = Math.PI / 2;
+            slicePlane.position.y = zPos;
+
+            scene.add(slicePlane);
+        }
+
+        // Orthogonal slice rendering
+        async function loadOrthoslice(viewName, sliceIndex) {
+            if (!currentStudy || !currentSeries) return;
+
+            const view = views[viewName];
+            try {
+                const response = await fetch(
+                    `/api/orthoslice/${encodeURIComponent(currentStudy)}/${encodeURIComponent(currentSeries)}/${view.plane}/${sliceIndex}`
+                );
+                const data = await response.json();
+
+                if (data.error) {
+                    console.error(`${viewName} slice error:`, data.error);
+                    return;
+                }
+
+                // Resize canvas to match image
+                view.canvas.width = data.width;
+                view.canvas.height = data.height;
+
+                // Create ImageData
+                const imageData = view.ctx.createImageData(data.width, data.height);
+
+                // Fill pixel data (grayscale)
+                for (let i = 0; i < data.pixels.length; i++) {
+                    const val = data.pixels[i];
+                    const idx = i * 4;
+                    imageData.data[idx] = val;     // R
+                    imageData.data[idx + 1] = val; // G
+                    imageData.data[idx + 2] = val; // B
+                    imageData.data[idx + 3] = 255; // A
+                }
+
+                view.ctx.putImageData(imageData, 0, 0);
+
+                // Update 3D slice plane for axial view only
+                if (viewName === 'axial') {
+                    updateSlicePlane(sliceIndex, data.totalSlices);
+                }
+
+            } catch (error) {
+                console.error(`Error loading ${viewName} slice:`, error);
+            }
+        }
+
+        // Load voxel metadata and display in probe
+        async function loadVoxelMetadata(viewName, x, y, z) {
+            if (!currentStudy || !currentSeries) return;
+
+            try {
+                const response = await fetch(
+                    `/api/voxel-metadata/${encodeURIComponent(currentStudy)}/${encodeURIComponent(currentSeries)}/${x}/${y}/${z}`
+                );
+                const data = await response.json();
+
+                if (data.error) {
+                    console.error('Metadata error:', data.error);
+                    return;
+                }
+
+                // Format and display metadata
+                const probeContent = document.getElementById(`${viewName}-probe-content`);
+                probeContent.innerHTML = formatMetadata(data);
+
+                // Expand probe
+                document.getElementById(`${viewName}-probe`).classList.add('expanded');
+
+            } catch (error) {
+                console.error('Error loading metadata:', error);
+            }
+        }
+
+        // Format metadata for display
+        function formatMetadata(data) {
+            const v = data.voxel;
+            const mri = data.mri;
+            const spatial = data.spatial;
+            const study = data.study;
+            const series = data.series;
+            const inst = data.instance;
+            const eq = data.equipment;
+            const disp = data.display;
+
+            // Format date
+            let dateStr = study.date || '';
+            if (dateStr.length === 8) {
+                dateStr = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6)}`;
+            }
+
+            // Format time
+            let timeStr = inst.acquisitionTime || '';
+            if (timeStr.length >= 6) {
+                timeStr = `${timeStr.slice(0,2)}:${timeStr.slice(2,4)}:${timeStr.slice(4,6)}`;
+            }
+
+            return `
+                <div class="section">
+                    <span class="label">Position:</span> <span class="value">X=${v.x} Y=${v.y} Z=${v.z}</span><br>
+                    <span class="label">World:</span> <span class="value">[${v.worldPos.join(', ')}] mm</span><br>
+                    <span class="label">Value:</span> <span class="value">${Math.round(v.rawValue)} (raw) | ${v.normValue.toFixed(3)} (norm)</span>
+                </div>
+                <div class="section">
+                    <span class="label">MRI:</span> <span class="value">TR=${mri.TR || '-'}ms TE=${mri.TE || '-'}ms FA=${mri.flipAngle || '-'}°</span><br>
+                    <span class="label">Field:</span> <span class="value">${mri.fieldStrength || '-'}T | ${mri.scanningSequence || '-'} | ${mri.acquisitionType || '-'}</span>
+                </div>
+                <div class="section">
+                    <span class="label">Slice:</span> <span class="value">${spatial.sliceLocation?.toFixed(2) || '-'}mm | Thick: ${spatial.sliceThickness || '-'}mm</span><br>
+                    <span class="label">Series:</span> <span class="value">${series.description} | #${inst.number}</span><br>
+                    <span class="label">Time:</span> <span class="value">${dateStr} ${timeStr}</span>
+                </div>
+                <div class="section">
+                    <span class="label">Scanner:</span> <span class="value">${eq.manufacturer || '-'} ${eq.model || ''}</span><br>
+                    <span class="label">Window:</span> <span class="value">C=${disp.windowCenter || '-'} W=${disp.windowWidth || '-'}</span>
+                </div>
+            `;
+        }
+
+        // Handle canvas click for probing
+        function setupCanvasClickHandler(viewName) {
+            const view = views[viewName];
+            view.canvas.addEventListener('click', (e) => {
+                if (!currentStudy || !currentSeries) return;
+
+                const rect = view.canvas.getBoundingClientRect();
+                const scaleX = view.canvas.width / rect.width;
+                const scaleY = view.canvas.height / rect.height;
+
+                const canvasX = Math.floor((e.clientX - rect.left) * scaleX);
+                const canvasY = Math.floor((e.clientY - rect.top) * scaleY);
+
+                let x, y, z;
+
+                if (viewName === 'axial') {
+                    // XY plane at Z
+                    x = canvasX;
+                    y = canvasY;
+                    z = parseInt(view.slider.value);
+                } else if (viewName === 'sagittal') {
+                    // YZ plane at X (canvas shows Y horizontal, Z vertical)
+                    x = parseInt(view.slider.value);
+                    y = canvasX;
+                    z = canvasY;
+                } else if (viewName === 'coronal') {
+                    // XZ plane at Y (canvas shows X horizontal, Z vertical)
+                    x = canvasX;
+                    y = parseInt(view.slider.value);
+                    z = canvasY;
+                }
+
+                loadVoxelMetadata(viewName, x, y, z);
+            });
+        }
+
+        // Setup click handlers for all views
+        Object.keys(views).forEach(name => setupCanvasClickHandler(name));
+
+        // Load studies
+        async function loadStudies() {
+            try {
+                const response = await fetch('/api/studies');
+                const studies = await response.json();
+
+                const select = document.getElementById('study');
+                select.innerHTML = '<option value="">-- Select a study --</option>';
+
+                studies.forEach(study => {
+                    const option = document.createElement('option');
+                    option.value = study.id;
+                    option.textContent = `${study.date} - ${study.description} (${study.sequences} seq, ${study.slices} slices)`;
+                    select.appendChild(option);
+                });
+
+                document.getElementById('status').textContent = `${studies.length} studies available`;
+            } catch (error) {
+                console.error('Error loading studies:', error);
+                document.getElementById('status').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        // Load sequences for selected study
+        async function loadSequences(studyId) {
+            const select = document.getElementById('sequence');
+
+            if (!studyId) {
+                select.innerHTML = '<option value="">-- Select a study first --</option>';
+                select.disabled = true;
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/sequences/${encodeURIComponent(studyId)}`);
+                const sequences = await response.json();
+
+                select.innerHTML = '<option value="">-- Select a sequence --</option>';
+
+                sequences.forEach(seq => {
+                    const option = document.createElement('option');
+                    option.value = seq.name;
+                    option.textContent = `${seq.name} (${seq.slices} slices)`;
+                    select.appendChild(option);
+                });
+
+                select.disabled = false;
+                document.getElementById('status').textContent = `${sequences.length} sequences available`;
+            } catch (error) {
+                console.error('Error loading sequences:', error);
+                document.getElementById('status').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        // Load volume for selected study and sequence
+        async function loadVolume(studyId, seriesName) {
+            if (!studyId || !seriesName) return;
+
+            currentStudy = studyId;
+            currentSeries = seriesName;
+            const loading = document.getElementById('loading');
+            const status = document.getElementById('status');
+
+            loading.classList.add('active');
+            status.textContent = '';
+
+            try {
+                // First get volume info for dimensions
+                const infoResponse = await fetch(`/api/volume-info/${encodeURIComponent(studyId)}/${encodeURIComponent(seriesName)}`);
+                const info = await infoResponse.json();
+
+                if (info.error) {
+                    status.textContent = `Error: ${info.error}`;
+                    return;
+                }
+
+                volumeDims = info.dimensions;
+
+                // Update dimension displays
+                document.getElementById('axial-dims').textContent = `${volumeDims.x}×${volumeDims.y}`;
+                document.getElementById('sagittal-dims').textContent = `${volumeDims.y}×${volumeDims.z}`;
+                document.getElementById('coronal-dims').textContent = `${volumeDims.x}×${volumeDims.z}`;
+
+                // Setup sliders for each view
+                const axialSlider = views.axial.slider;
+                axialSlider.max = volumeDims.z - 1;
+                axialSlider.value = Math.floor(volumeDims.z / 2);
+                axialSlider.disabled = false;
+                document.getElementById('axial-value').textContent = `${axialSlider.value} / ${volumeDims.z - 1}`;
+
+                const sagittalSlider = views.sagittal.slider;
+                sagittalSlider.max = volumeDims.x - 1;
+                sagittalSlider.value = Math.floor(volumeDims.x / 2);
+                sagittalSlider.disabled = false;
+                document.getElementById('sagittal-value').textContent = `${sagittalSlider.value} / ${volumeDims.x - 1}`;
+
+                const coronalSlider = views.coronal.slider;
+                coronalSlider.max = volumeDims.y - 1;
+                coronalSlider.value = Math.floor(volumeDims.y / 2);
+                coronalSlider.disabled = false;
+                document.getElementById('coronal-value').textContent = `${coronalSlider.value} / ${volumeDims.y - 1}`;
+
+                // Load initial slices for all views
+                await Promise.all([
+                    loadOrthoslice('axial', parseInt(axialSlider.value)),
+                    loadOrthoslice('sagittal', parseInt(sagittalSlider.value)),
+                    loadOrthoslice('coronal', parseInt(coronalSlider.value))
+                ]);
+
+                // Now load the 3D volume data
+                const response = await fetch(`/api/volume/${encodeURIComponent(studyId)}/${encodeURIComponent(seriesName)}`);
+                const data = await response.json();
+
+                if (data.error) {
+                    status.textContent = `Error: ${data.error}`;
+                    return;
+                }
+
+                // Store data for threshold filtering
+                volumeData = data;
+                allVoxels = data.voxels;
+
+                // Create initial 3D visualization
+                const threshold = parseFloat(document.getElementById('threshold').value);
+                createVoxels(threshold);
+
+            } catch (error) {
+                console.error('Error loading volume:', error);
+                status.textContent = `Error: ${error.message}`;
+            } finally {
+                loading.classList.remove('active');
+            }
+        }
+
+        // Event listeners
+        document.getElementById('study').addEventListener('change', (e) => {
+            const studyId = e.target.value;
+            currentStudy = studyId;
+            loadSequences(studyId);
+
+            // Clear current 3D visualization
+            if (currentMesh) {
+                scene.remove(currentMesh);
+                currentMesh.geometry.dispose();
+                currentMesh.material.dispose();
+                currentMesh = null;
+            }
+            if (slicePlane) {
+                scene.remove(slicePlane);
+                slicePlane.geometry.dispose();
+                slicePlane.material.dispose();
+                slicePlane = null;
+            }
+            volumeData = null;
+            allVoxels = [];
+
+            // Reset all view panels
+            Object.keys(views).forEach(name => {
+                const view = views[name];
+                view.slider.disabled = true;
+                view.slider.value = 0;
+                view.slider.max = 0;
+                document.getElementById(`${name}-value`).textContent = '0 / 0';
+                document.getElementById(`${name}-dims`).textContent = '';
+                document.getElementById(`${name}-probe`).classList.remove('expanded');
+                view.ctx.clearRect(0, 0, view.canvas.width, view.canvas.height);
+            });
+        });
+
+        document.getElementById('sequence').addEventListener('change', (e) => {
+            // Collapse all probes when changing sequence
+            Object.keys(views).forEach(name => {
+                document.getElementById(`${name}-probe`).classList.remove('expanded');
+            });
+            loadVolume(currentStudy, e.target.value);
+        });
+
+        // Threshold slider
+        const thresholdSlider = document.getElementById('threshold');
+        const thresholdValue = document.getElementById('threshold-value');
+
+        thresholdSlider.addEventListener('input', (e) => {
+            const value = parseFloat(e.target.value);
+            thresholdValue.textContent = value.toFixed(2);
+            createVoxels(value);
+        });
+
+        // Setup slider event listeners for each view
+        Object.keys(views).forEach(name => {
+            const view = views[name];
+            view.slider.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value);
+                const max = parseInt(e.target.max);
+                document.getElementById(`${name}-value`).textContent = `${value} / ${max}`;
+
+                if (currentStudy && currentSeries) {
+                    loadOrthoslice(name, value);
+                    // Collapse probe when slider changes
+                    document.getElementById(`${name}-probe`).classList.remove('expanded');
+                }
+            });
+        });
+
+        window.addEventListener('resize', () => {
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        });
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Initialize
+        loadStudies();
+        animate();
+    </script>
+</body>
+</html>
