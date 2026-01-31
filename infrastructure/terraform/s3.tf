@@ -38,21 +38,45 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "dicom" {
   }
 }
 
-# Lifecycle rules - transition old versions to cheaper storage
+# Lifecycle rules - DICOM files are rarely accessed after initial parsing
+# Move to cheaper storage classes automatically
 resource "aws_s3_bucket_lifecycle_configuration" "dicom" {
   bucket = aws_s3_bucket.dicom.id
 
+  # Move current objects to Infrequent Access after 30 days
+  # (files are only accessed during initial upload/parsing)
+  rule {
+    id     = "move-to-infrequent-access"
+    status = "Enabled"
+
+    filter {
+      prefix = "patients/"
+    }
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    # Move to Glacier after 90 days for long-term archive
+    transition {
+      days          = 90
+      storage_class = "GLACIER"
+    }
+  }
+
+  # Handle old versions
   rule {
     id     = "archive-old-versions"
     status = "Enabled"
 
     noncurrent_version_transition {
-      noncurrent_days = 30
+      noncurrent_days = 7
       storage_class   = "STANDARD_IA"
     }
 
     noncurrent_version_expiration {
-      noncurrent_days = 90
+      noncurrent_days = 30
     }
   }
 }
