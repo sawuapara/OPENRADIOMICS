@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MRI Voxel Viewer</title>
+    <title>OpenRadiomics Viewer</title>
     <link rel="icon" href="data:,">
     <style>
         * {
@@ -17,53 +17,75 @@
             color: #eee;
             overflow: hidden;
         }
-        #app {
+
+        /* Header Bar */
+        #header {
             display: flex;
-            width: 100vw;
-            height: 100vh;
+            align-items: center;
+            padding: 10px 20px;
+            background: #0d0d1a;
+            border-bottom: 1px solid #333;
+            gap: 20px;
+            height: 60px;
         }
-        #left-panel {
+        #header h1 {
+            font-size: 18px;
+            color: #4fc3f7;
+            white-space: nowrap;
+        }
+        .header-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .header-group label {
+            font-size: 12px;
+            color: #888;
+            white-space: nowrap;
+        }
+        .header-group select {
+            padding: 6px 10px;
+            border: none;
+            border-radius: 5px;
+            background: #2d2d44;
+            color: #fff;
+            font-size: 13px;
+            cursor: pointer;
+            min-width: 120px;
+        }
+        .header-group select:focus {
+            outline: 2px solid #4fc3f7;
+        }
+        #loading-indicator {
+            color: #4fc3f7;
+            font-size: 12px;
+            display: none;
+        }
+        #loading-indicator.active {
+            display: inline;
+        }
+        .spacer {
             flex: 1;
+        }
+        #status-text {
+            font-size: 11px;
+            color: #666;
+        }
+        .github-badge {
+            display: flex;
+            align-items: center;
+            margin-right: 15px;
+        }
+
+        /* Main Content Area */
+        #main-content {
+            width: 100%;
+            height: calc(100vh - 60px);
             position: relative;
         }
-        #right-panel {
-            width: 480px;
-            background: #0d0d1a;
-            border-left: 1px solid #333;
-            display: flex;
-            flex-direction: column;
-            overflow-y: auto;
-        }
-        #controls {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 100;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 20px;
-            border-radius: 10px;
-            min-width: 280px;
-        }
-        h1 {
-            font-size: 18px;
-            margin-bottom: 15px;
-            color: #4fc3f7;
-        }
-        h2 {
-            font-size: 14px;
-            padding: 15px;
-            color: #4fc3f7;
-            background: rgba(0,0,0,0.3);
-            border-bottom: 1px solid #333;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-size: 12px;
-            color: #aaa;
-        }
+
+        /* Common select/input styling */
         select, input[type="range"] {
-            width: 100%;
             padding: 8px;
             border: none;
             border-radius: 5px;
@@ -95,46 +117,232 @@
             margin-top: -6px;
             cursor: pointer;
         }
-        .control-group {
-            margin-bottom: 15px;
+
+        /* =========================
+           VIEW MODE LAYOUTS
+           ========================= */
+
+        /* Hide all view containers by default */
+        .view-container {
+            display: none;
+            width: 100%;
+            height: 100%;
         }
-        .slider-value {
+        .view-container.active {
+            display: flex;
+        }
+
+        /* --- VOLUME VIEW (Default) --- */
+        #volume-view {
+            flex-direction: column;
+        }
+        #volume-view .top-row {
+            flex: 1;
+            display: flex;
+            position: relative;
+        }
+        #volume-view .bottom-row {
+            height: 280px;
+            display: flex;
+            border-top: 1px solid #333;
+        }
+        #volume-view #canvas-container {
+            flex: 1;
+            position: relative;
+        }
+        #volume-view #volume-controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            min-width: 220px;
+        }
+        #volume-view #volume-controls .control-group {
+            margin-bottom: 10px;
+        }
+        #volume-view #volume-controls label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #aaa;
+        }
+        #volume-view #volume-controls .slider-value {
             float: right;
             color: #4fc3f7;
             font-weight: bold;
         }
-        #status {
-            margin-top: 15px;
-            font-size: 11px;
-            color: #888;
-            white-space: pre-line;
-        }
-        #loading {
-            display: none;
-            margin-top: 10px;
-            color: #4fc3f7;
-        }
-        #loading.active {
-            display: block;
-        }
-        #canvas-container {
-            width: 100%;
-            height: 100%;
-        }
-        #info {
+        #volume-view #info {
             position: absolute;
             bottom: 20px;
             left: 20px;
             font-size: 12px;
             color: #666;
         }
-        /* Orthogonal View Panels */
-        .view-panel {
-            border-bottom: 1px solid #333;
+
+        /* --- TRIPLANAR VIEW --- */
+        #triplanar-view {
+            flex-direction: row;
         }
-        .view-header {
+        #triplanar-view .ortho-panel {
+            flex: 1;
+            border-right: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+        }
+        #triplanar-view .ortho-panel:last-child {
+            border-right: none;
+        }
+
+        /* --- SINGLE VIEW --- */
+        #single-view {
+            flex-direction: column;
+            padding: 20px;
+        }
+        #single-view .single-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+        #single-view .single-canvas-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #single-view .single-canvas {
+            max-width: 100%;
+            max-height: 100%;
+            cursor: crosshair;
+        }
+        #single-view .single-slider-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        #single-view .single-slider-row input[type="range"] {
+            flex: 1;
+        }
+        #single-view .single-probe {
+            margin-top: 15px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            min-height: 80px;
+        }
+
+        /* --- COMPARE VIEW --- */
+        #compare-view {
+            flex-direction: column;
+        }
+        #compare-view .sync-bar {
+            padding: 10px 20px;
+            background: #0d0d1a;
+            border-bottom: 1px solid #333;
+            text-align: center;
+        }
+        #compare-view .sync-button {
+            padding: 8px 20px;
+            background: #2d2d44;
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            cursor: pointer;
             font-size: 13px;
-            padding: 10px 15px;
+            transition: background 0.2s;
+        }
+        #compare-view .sync-button.synced {
+            background: #4fc3f7;
+            color: #000;
+        }
+        #compare-view .sync-button:hover {
+            opacity: 0.9;
+        }
+        #compare-view .compare-panels {
+            flex: 1;
+            display: flex;
+        }
+        #compare-view .compare-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            border-right: 1px solid #333;
+        }
+        #compare-view .compare-panel:last-child {
+            border-right: none;
+        }
+        #compare-view .compare-selectors {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        #compare-view .compare-selectors .selector-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        #compare-view .compare-selectors label {
+            font-size: 11px;
+            color: #888;
+        }
+        #compare-view .compare-selectors select {
+            min-width: 140px;
+            padding: 6px;
+            font-size: 12px;
+        }
+        #compare-view .compare-canvas-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #compare-view .compare-canvas {
+            max-width: 100%;
+            max-height: 100%;
+            cursor: crosshair;
+        }
+        #compare-view .compare-slider-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        #compare-view .compare-slider-row input[type="range"] {
+            flex: 1;
+        }
+        #compare-view .compare-probe {
+            margin-top: 10px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 8px;
+            padding: 10px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 11px;
+            min-height: 60px;
+        }
+
+        /* Orthogonal View Panel (used in volume and triplanar) */
+        .ortho-panel {
+            display: flex;
+            flex-direction: column;
+            background: #0d0d1a;
+        }
+        .ortho-header {
+            font-size: 13px;
+            padding: 8px 12px;
             color: #4fc3f7;
             background: rgba(0,0,0,0.4);
             font-weight: bold;
@@ -142,169 +350,567 @@
             justify-content: space-between;
             align-items: center;
         }
-        .view-header span {
+        .ortho-header span {
             font-size: 11px;
             color: #888;
             font-weight: normal;
         }
-        .view-content {
+        .ortho-content {
+            flex: 1;
             display: flex;
-            flex-direction: column;
+            justify-content: center;
             align-items: center;
-            padding: 10px;
-        }
-        .view-canvas {
-            max-width: 100%;
-            border: 2px solid #333;
             background: #000;
+            padding: 8px;
+            min-height: 0;
+        }
+        .ortho-canvas {
+            max-width: 100%;
+            max-height: 100%;
+            border: 2px solid #333;
             cursor: crosshair;
         }
-        .view-canvas.axial {
-            max-height: 200px;
-        }
-        .view-canvas.sagittal,
-        .view-canvas.coronal {
-            max-height: 250px;
-            /* Will be scaled via CSS to correct aspect ratio */
-        }
-        .view-controls {
-            width: 100%;
-            padding: 8px 15px;
+        .ortho-controls {
+            padding: 8px 12px;
             background: rgba(0,0,0,0.2);
         }
-        .view-controls .control-group {
-            margin-bottom: 0;
+        .ortho-controls .control-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        /* Data Probe */
-        .data-probe {
-            width: 100%;
-            background: rgba(0,0,0,0.3);
+        .ortho-controls label {
             font-size: 11px;
+            color: #888;
+            white-space: nowrap;
+        }
+        .ortho-controls input[type="range"] {
+            flex: 1;
+            height: 20px;
+        }
+        .ortho-controls .slider-value {
+            font-size: 11px;
+            color: #4fc3f7;
+            min-width: 60px;
+            text-align: right;
+        }
+        .ortho-probe {
+            background: rgba(0,0,0,0.3);
+            font-size: 10px;
             font-family: 'Monaco', 'Menlo', monospace;
             max-height: 0;
             overflow: hidden;
             transition: max-height 0.3s ease-out;
         }
-        .data-probe.expanded {
-            max-height: 300px;
+        .ortho-probe.expanded {
+            max-height: 200px;
         }
-        .data-probe-content {
-            padding: 10px 15px;
-            line-height: 1.6;
+        .ortho-probe-content {
+            padding: 8px 12px;
+            line-height: 1.5;
         }
-        .data-probe-content .section {
+        .click-hint {
+            font-size: 9px;
+            color: #444;
+            text-align: center;
+            padding: 4px;
+        }
+
+        /* Data Probe Formatting */
+        .probe-section {
             border-top: 1px solid #333;
             padding-top: 6px;
             margin-top: 6px;
         }
-        .data-probe-content .section:first-child {
+        .probe-section:first-child {
             border-top: none;
             padding-top: 0;
             margin-top: 0;
         }
-        .data-probe-content .label {
+        .probe-label {
             color: #888;
         }
-        .data-probe-content .value {
+        .probe-value {
             color: #4fc3f7;
         }
-        .click-hint {
+
+        /* =========================
+           DATA POINTS FEATURE
+           ========================= */
+
+        /* Add Points Toggle Button */
+        #add-point-toggle {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 5px;
+            background: #2d2d44;
+            color: #fff;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        #add-point-toggle:hover {
+            background: #3d3d54;
+        }
+        #add-point-toggle.active {
+            background: #00cc00;
+            color: #000;
+            font-weight: bold;
+        }
+
+        /* Crosshair cursor when add mode is active */
+        .add-point-mode .ortho-canvas,
+        .add-point-mode .single-canvas,
+        .add-point-mode .compare-canvas {
+            cursor: crosshair !important;
+        }
+
+        /* Data Points Container */
+        #data-points-container {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            max-height: 300px;
+            background: #0d0d1a;
+            border-top: 2px solid #4fc3f7;
+            z-index: 1000;
+            overflow: hidden;
+        }
+        #data-points-container.visible {
+            display: block;
+        }
+
+        /* Data Points Header */
+        .data-points-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 15px;
+            background: #1a1a2e;
+            border-bottom: 1px solid #333;
+        }
+        .data-points-header h3 {
+            font-size: 14px;
+            color: #4fc3f7;
+            margin: 0;
+        }
+        .data-points-header-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .data-points-header button {
+            padding: 4px 10px;
+            border: none;
+            border-radius: 4px;
+            background: #2d2d44;
+            color: #fff;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        .data-points-header button:hover {
+            background: #3d3d54;
+        }
+        .data-points-header button.danger {
+            background: #660000;
+        }
+        .data-points-header button.danger:hover {
+            background: #880000;
+        }
+
+        /* Data Points Table */
+        .data-points-table-wrapper {
+            max-height: 250px;
+            overflow-y: auto;
+        }
+        .data-points-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        .data-points-table th {
+            background: #1a1a2e;
+            color: #888;
+            font-weight: normal;
+            text-align: left;
+            padding: 8px 10px;
+            border-bottom: 1px solid #333;
+            position: sticky;
+            top: 0;
+        }
+        .data-points-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #222;
+            vertical-align: middle;
+        }
+        .data-points-table tr.point-row {
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .data-points-table tr.point-row:hover {
+            background: rgba(79, 195, 247, 0.1);
+        }
+        .data-points-table tr.point-row.expanded {
+            background: rgba(79, 195, 247, 0.15);
+        }
+
+        /* Expanded Details Row */
+        .data-points-table tr.details-row {
+            display: none;
+        }
+        .data-points-table tr.details-row.visible {
+            display: table-row;
+        }
+        .data-points-table tr.details-row td {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px 15px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 11px;
+            line-height: 1.6;
+        }
+
+        /* Visibility Toggle Buttons */
+        .visibility-toggles {
+            display: flex;
+            gap: 4px;
+        }
+        .visibility-toggle {
+            width: 22px;
+            height: 22px;
+            border: none;
+            border-radius: 3px;
+            background: #444;
+            color: #888;
             font-size: 10px;
-            color: #555;
-            text-align: center;
-            padding: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .visibility-toggle.active {
+            background: #00cc00;
+            color: #000;
+        }
+        .visibility-toggle:hover {
+            opacity: 0.8;
+        }
+
+        /* Delete Button */
+        .delete-point-btn {
+            width: 22px;
+            height: 22px;
+            border: none;
+            border-radius: 3px;
+            background: #550000;
+            color: #ff6666;
+            font-size: 14px;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+        .delete-point-btn:hover {
+            background: #770000;
+        }
+
+        /* Adjust main content when data points visible */
+        body.data-points-visible #main-content {
+            height: calc(100vh - 60px - 200px);
         }
     </style>
 </head>
 <body>
-    <div id="app">
-        <div id="left-panel">
-            <div id="controls">
-                <h1>MRI Voxel Viewer</h1>
+    <!-- Header Bar -->
+    <div id="header">
+        <h1>OPENRADIOMICS</h1>
 
-                <div class="control-group">
-                    <label for="study">Select Study:</label>
-                    <select id="study">
-                        <option value="">-- Loading studies --</option>
-                    </select>
-                </div>
-
-                <div class="control-group">
-                    <label for="sequence">Select Sequence:</label>
-                    <select id="sequence" disabled>
-                        <option value="">-- Select a study first --</option>
-                    </select>
-                </div>
-
-                <div class="control-group">
-                    <label>
-                        Intensity Threshold:
-                        <span class="slider-value" id="threshold-value">0.15</span>
-                    </label>
-                    <input type="range" id="threshold" min="0" max="1" step="0.01" value="0.15">
-                </div>
-
-                <div id="loading">Loading volume...</div>
-                <div id="status"></div>
-            </div>
-            <div id="canvas-container"></div>
-            <div id="info">Drag to rotate • Scroll to zoom • Right-drag to pan</div>
+        <div class="header-group">
+            <label for="view-mode">View:</label>
+            <select id="view-mode">
+                <option value="volume">3D Volume</option>
+                <option value="triplanar">Tri-Planar</option>
+                <option value="single">Single</option>
+                <option value="compare">Compare</option>
+            </select>
         </div>
 
-        <div id="right-panel">
-            <!-- AXIAL VIEW (XY plane, slice along Z) -->
-            <div class="view-panel" id="axial-panel">
-                <div class="view-header">AXIAL (Z) <span id="axial-dims"></span></div>
-                <div class="view-content">
-                    <canvas class="view-canvas" id="axial-canvas" width="256" height="256"></canvas>
-                    <div class="click-hint">Click image to probe</div>
-                </div>
-                <div class="view-controls">
-                    <div class="control-group">
-                        <label>Slice Z: <span class="slider-value" id="axial-value">0 / 0</span></label>
-                        <input type="range" id="axial-slider" min="0" max="0" step="1" value="0" disabled>
-                    </div>
-                </div>
-                <div class="data-probe" id="axial-probe">
-                    <div class="data-probe-content" id="axial-probe-content"></div>
-                </div>
-            </div>
+        <div class="header-group" id="main-study-selector">
+            <label for="study">Study:</label>
+            <select id="study">
+                <option value="">-- Loading --</option>
+            </select>
+        </div>
 
-            <!-- SAGITTAL VIEW (YZ plane, slice along X) -->
-            <div class="view-panel" id="sagittal-panel">
-                <div class="view-header">SAGITTAL (X) <span id="sagittal-dims"></span></div>
-                <div class="view-content">
-                    <canvas class="view-canvas" id="sagittal-canvas" width="256" height="256"></canvas>
-                    <div class="click-hint">Click image to probe</div>
-                </div>
-                <div class="view-controls">
-                    <div class="control-group">
-                        <label>Slice X: <span class="slider-value" id="sagittal-value">0 / 0</span></label>
-                        <input type="range" id="sagittal-slider" min="0" max="0" step="1" value="0" disabled>
-                    </div>
-                </div>
-                <div class="data-probe" id="sagittal-probe">
-                    <div class="data-probe-content" id="sagittal-probe-content"></div>
-                </div>
-            </div>
+        <div class="header-group" id="main-sequence-selector">
+            <label for="sequence">Sequence:</label>
+            <select id="sequence" disabled>
+                <option value="">-- Select study --</option>
+            </select>
+        </div>
 
-            <!-- CORONAL VIEW (XZ plane, slice along Y) -->
-            <div class="view-panel" id="coronal-panel">
-                <div class="view-header">CORONAL (Y) <span id="coronal-dims"></span></div>
-                <div class="view-content">
-                    <canvas class="view-canvas" id="coronal-canvas" width="256" height="256"></canvas>
-                    <div class="click-hint">Click image to probe</div>
-                </div>
-                <div class="view-controls">
+        <span id="loading-indicator">Loading...</span>
+
+        <button id="add-point-toggle">+ Add Points: OFF</button>
+
+        <div class="spacer"></div>
+        <div class="github-badge">
+            <a class="github-button"
+               href="https://github.com/sawuapara/OPENRADIOMICS"
+               data-icon="octicon-star"
+               data-show-count="true"
+               data-size="large"
+               aria-label="Star sawuapara/OPENRADIOMICS on GitHub">
+               Star
+            </a>
+        </div>
+        <span id="status-text"></span>
+    </div>
+
+    <!-- Main Content Area -->
+    <div id="main-content">
+
+        <!-- VOLUME VIEW (Default) -->
+        <div id="volume-view" class="view-container active">
+            <div class="top-row">
+                <div id="canvas-container"></div>
+                <div id="volume-controls">
                     <div class="control-group">
-                        <label>Slice Y: <span class="slider-value" id="coronal-value">0 / 0</span></label>
-                        <input type="range" id="coronal-slider" min="0" max="0" step="1" value="0" disabled>
+                        <label>
+                            Intensity Threshold:
+                            <span class="slider-value" id="threshold-value">0.15</span>
+                        </label>
+                        <input type="range" id="threshold" min="0" max="1" step="0.01" value="0.15" style="width:100%">
                     </div>
+                    <div id="volume-status" style="font-size:11px; color:#888;"></div>
                 </div>
-                <div class="data-probe" id="coronal-probe">
-                    <div class="data-probe-content" id="coronal-probe-content"></div>
+                <div id="info">Drag to rotate | Scroll to zoom | Right-drag to pan</div>
+            </div>
+            <div class="bottom-row">
+                <!-- Axial mini-panel -->
+                <div class="ortho-panel" data-view="axial" data-context="volume">
+                    <div class="ortho-header">AXIAL (Z) <span class="dims"></span></div>
+                    <div class="ortho-content">
+                        <canvas class="ortho-canvas" width="256" height="256"></canvas>
+                    </div>
+                    <div class="ortho-controls">
+                        <div class="control-row">
+                            <label>Z:</label>
+                            <input type="range" class="slice-slider" min="0" max="0" value="0" disabled>
+                            <span class="slider-value">0/0</span>
+                        </div>
+                    </div>
+                    <div class="click-hint">Click to probe</div>
+                    <div class="ortho-probe"><div class="ortho-probe-content"></div></div>
+                </div>
+                <!-- Sagittal mini-panel -->
+                <div class="ortho-panel" data-view="sagittal" data-context="volume">
+                    <div class="ortho-header">SAGITTAL (X) <span class="dims"></span></div>
+                    <div class="ortho-content">
+                        <canvas class="ortho-canvas" width="256" height="256"></canvas>
+                    </div>
+                    <div class="ortho-controls">
+                        <div class="control-row">
+                            <label>X:</label>
+                            <input type="range" class="slice-slider" min="0" max="0" value="0" disabled>
+                            <span class="slider-value">0/0</span>
+                        </div>
+                    </div>
+                    <div class="click-hint">Click to probe</div>
+                    <div class="ortho-probe"><div class="ortho-probe-content"></div></div>
+                </div>
+                <!-- Coronal mini-panel -->
+                <div class="ortho-panel" data-view="coronal" data-context="volume">
+                    <div class="ortho-header">CORONAL (Y) <span class="dims"></span></div>
+                    <div class="ortho-content">
+                        <canvas class="ortho-canvas" width="256" height="256"></canvas>
+                    </div>
+                    <div class="ortho-controls">
+                        <div class="control-row">
+                            <label>Y:</label>
+                            <input type="range" class="slice-slider" min="0" max="0" value="0" disabled>
+                            <span class="slider-value">0/0</span>
+                        </div>
+                    </div>
+                    <div class="click-hint">Click to probe</div>
+                    <div class="ortho-probe"><div class="ortho-probe-content"></div></div>
                 </div>
             </div>
+        </div>
+
+        <!-- TRIPLANAR VIEW -->
+        <div id="triplanar-view" class="view-container">
+            <div class="ortho-panel" data-view="axial" data-context="triplanar">
+                <div class="ortho-header">AXIAL (Z) <span class="dims"></span></div>
+                <div class="ortho-content">
+                    <canvas class="ortho-canvas" width="256" height="256"></canvas>
+                </div>
+                <div class="ortho-controls">
+                    <div class="control-row">
+                        <label>Slice Z:</label>
+                        <input type="range" class="slice-slider" min="0" max="0" value="0" disabled>
+                        <span class="slider-value">0/0</span>
+                    </div>
+                </div>
+                <div class="click-hint">Click image to probe</div>
+                <div class="ortho-probe"><div class="ortho-probe-content"></div></div>
+            </div>
+            <div class="ortho-panel" data-view="sagittal" data-context="triplanar">
+                <div class="ortho-header">SAGITTAL (X) <span class="dims"></span></div>
+                <div class="ortho-content">
+                    <canvas class="ortho-canvas" width="256" height="256"></canvas>
+                </div>
+                <div class="ortho-controls">
+                    <div class="control-row">
+                        <label>Slice X:</label>
+                        <input type="range" class="slice-slider" min="0" max="0" value="0" disabled>
+                        <span class="slider-value">0/0</span>
+                    </div>
+                </div>
+                <div class="click-hint">Click image to probe</div>
+                <div class="ortho-probe"><div class="ortho-probe-content"></div></div>
+            </div>
+            <div class="ortho-panel" data-view="coronal" data-context="triplanar">
+                <div class="ortho-header">CORONAL (Y) <span class="dims"></span></div>
+                <div class="ortho-content">
+                    <canvas class="ortho-canvas" width="256" height="256"></canvas>
+                </div>
+                <div class="ortho-controls">
+                    <div class="control-row">
+                        <label>Slice Y:</label>
+                        <input type="range" class="slice-slider" min="0" max="0" value="0" disabled>
+                        <span class="slider-value">0/0</span>
+                    </div>
+                </div>
+                <div class="click-hint">Click image to probe</div>
+                <div class="ortho-probe"><div class="ortho-probe-content"></div></div>
+            </div>
+        </div>
+
+        <!-- SINGLE VIEW -->
+        <div id="single-view" class="view-container">
+            <div class="single-controls">
+                <div class="header-group">
+                    <label for="single-plane">Plane:</label>
+                    <select id="single-plane">
+                        <option value="axial">Axial (Z)</option>
+                        <option value="sagittal">Sagittal (X)</option>
+                        <option value="coronal">Coronal (Y)</option>
+                    </select>
+                </div>
+                <span id="single-dims" style="font-size:12px; color:#888;"></span>
+            </div>
+            <div class="single-canvas-container">
+                <canvas id="single-canvas" class="single-canvas" width="512" height="512"></canvas>
+            </div>
+            <div class="single-slider-row">
+                <label id="single-slice-label" style="font-size:12px; color:#888;">Slice:</label>
+                <input type="range" id="single-slider" min="0" max="0" value="0" disabled>
+                <span id="single-slider-value" style="font-size:12px; color:#4fc3f7;">0 / 0</span>
+            </div>
+            <div class="single-probe" id="single-probe">
+                <span style="color:#666;">Click on the image to probe voxel data</span>
+            </div>
+        </div>
+
+        <!-- COMPARE VIEW -->
+        <div id="compare-view" class="view-container">
+            <div class="sync-bar">
+                <button id="sync-button" class="sync-button">🔗 Sync Slices</button>
+            </div>
+            <div class="compare-panels">
+                <!-- Panel A -->
+                <div class="compare-panel" id="compare-panel-a">
+                    <div class="compare-selectors">
+                        <div class="selector-group">
+                            <label for="compare-study-a">Study:</label>
+                            <select id="compare-study-a"><option value="">--</option></select>
+                        </div>
+                        <div class="selector-group">
+                            <label for="compare-seq-a">Sequence:</label>
+                            <select id="compare-seq-a" disabled><option value="">--</option></select>
+                        </div>
+                        <div class="selector-group">
+                            <label for="compare-plane-a">Plane:</label>
+                            <select id="compare-plane-a">
+                                <option value="axial">Axial</option>
+                                <option value="sagittal">Sagittal</option>
+                                <option value="coronal">Coronal</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="compare-canvas-container">
+                        <canvas id="compare-canvas-a" class="compare-canvas" width="512" height="512"></canvas>
+                    </div>
+                    <div class="compare-slider-row">
+                        <label style="font-size:11px; color:#888;">Slice:</label>
+                        <input type="range" id="compare-slider-a" min="0" max="0" value="0" disabled>
+                        <span id="compare-slider-value-a" style="font-size:11px; color:#4fc3f7;">0/0</span>
+                    </div>
+                    <div class="compare-probe" id="compare-probe-a">
+                        <span style="color:#666;">Click to probe</span>
+                    </div>
+                </div>
+                <!-- Panel B -->
+                <div class="compare-panel" id="compare-panel-b">
+                    <div class="compare-selectors">
+                        <div class="selector-group">
+                            <label for="compare-study-b">Study:</label>
+                            <select id="compare-study-b"><option value="">--</option></select>
+                        </div>
+                        <div class="selector-group">
+                            <label for="compare-seq-b">Sequence:</label>
+                            <select id="compare-seq-b" disabled><option value="">--</option></select>
+                        </div>
+                        <div class="selector-group">
+                            <label for="compare-plane-b">Plane:</label>
+                            <select id="compare-plane-b">
+                                <option value="axial">Axial</option>
+                                <option value="sagittal">Sagittal</option>
+                                <option value="coronal">Coronal</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="compare-canvas-container">
+                        <canvas id="compare-canvas-b" class="compare-canvas" width="512" height="512"></canvas>
+                    </div>
+                    <div class="compare-slider-row">
+                        <label style="font-size:11px; color:#888;">Slice:</label>
+                        <input type="range" id="compare-slider-b" min="0" max="0" value="0" disabled>
+                        <span id="compare-slider-value-b" style="font-size:11px; color:#4fc3f7;">0/0</span>
+                    </div>
+                    <div class="compare-probe" id="compare-probe-b">
+                        <span style="color:#666;">Click to probe</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Data Points Container -->
+    <div id="data-points-container">
+        <div class="data-points-header">
+            <h3 id="data-points-title">Data Points (0)</h3>
+            <div class="data-points-header-actions">
+                <button id="collapse-data-points">Collapse</button>
+                <button id="clear-all-points" class="danger">Clear All</button>
+            </div>
+        </div>
+        <div class="data-points-table-wrapper">
+            <table class="data-points-table">
+                <thead>
+                    <tr>
+                        <th style="width: 40px;">#</th>
+                        <th style="width: 100px;">Study</th>
+                        <th style="width: 120px;">Sequence</th>
+                        <th style="width: 80px;">View</th>
+                        <th style="width: 100px;">Coords</th>
+                        <th style="width: 80px;">Value</th>
+                        <th style="width: 120px;">Visible In</th>
+                    </tr>
+                </thead>
+                <tbody id="data-points-tbody">
+                </tbody>
+            </table>
         </div>
     </div>
 
@@ -322,9 +928,90 @@
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-        console.log('Three.js loaded:', THREE.REVISION);
+        console.log('OpenRadiomics Viewer - Three.js:', THREE.REVISION);
 
-        // Scene setup
+        // ========================================
+        // URL STATE MANAGEMENT
+        // ========================================
+
+        function getViewFromURL() {
+            const params = new URLSearchParams(window.location.search);
+            const view = params.get('view');
+            if (['single', 'compare', 'triplanar', 'volume'].includes(view)) {
+                return view;
+            }
+            return 'volume'; // default
+        }
+
+        function setViewInURL(view) {
+            const url = new URL(window.location);
+            url.searchParams.set('view', view);
+            history.pushState({}, '', url);
+        }
+
+        // ========================================
+        // VIEW SWITCHING
+        // ========================================
+
+        let currentViewMode = getViewFromURL();
+
+        function switchView(viewMode) {
+            currentViewMode = viewMode;
+            setViewInURL(viewMode);
+
+            // Hide all view containers
+            document.querySelectorAll('.view-container').forEach(el => {
+                el.classList.remove('active');
+            });
+
+            // Show the selected view
+            const viewEl = document.getElementById(`${viewMode}-view`);
+            if (viewEl) {
+                viewEl.classList.add('active');
+            }
+
+            // Handle visibility of main study/sequence selectors
+            const mainStudySelector = document.getElementById('main-study-selector');
+            const mainSeqSelector = document.getElementById('main-sequence-selector');
+
+            if (viewMode === 'compare') {
+                // Hide main selectors in compare view (each panel has its own)
+                mainStudySelector.style.display = 'none';
+                mainSeqSelector.style.display = 'none';
+            } else {
+                mainStudySelector.style.display = 'flex';
+                mainSeqSelector.style.display = 'flex';
+            }
+
+            // Resize 3D renderer if switching to volume view
+            if (viewMode === 'volume') {
+                handleResize();
+            }
+
+            // Refresh current view if data is loaded
+            if (currentStudy && currentSeries) {
+                refreshCurrentView();
+            }
+        }
+
+        // Initialize view mode dropdown
+        const viewModeSelect = document.getElementById('view-mode');
+        viewModeSelect.value = currentViewMode;
+        viewModeSelect.addEventListener('change', (e) => {
+            switchView(e.target.value);
+        });
+
+        // Handle browser back/forward
+        window.addEventListener('popstate', () => {
+            const view = getViewFromURL();
+            viewModeSelect.value = view;
+            switchView(view);
+        });
+
+        // ========================================
+        // THREE.JS 3D SCENE SETUP
+        // ========================================
+
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x1a1a2e);
@@ -342,7 +1029,6 @@
         renderer.setPixelRatio(window.devicePixelRatio);
         container.appendChild(renderer.domElement);
 
-        // Controls
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
@@ -359,7 +1045,10 @@
         directionalLight2.position.set(-100, -100, -100);
         scene.add(directionalLight2);
 
-        // State
+        // ========================================
+        // GLOBAL STATE
+        // ========================================
+
         let currentMesh = null;
         let slicePlane = null;
         let allVoxels = [];
@@ -367,48 +1056,445 @@
         let currentStudy = null;
         let currentSeries = null;
         let volumeDims = { x: 0, y: 0, z: 0 };
+        let studiesCache = [];
 
-        // View configurations
-        const views = {
-            axial: { plane: 'axial', axis: 'z', canvas: null, ctx: null, slider: null },
-            sagittal: { plane: 'sagittal', axis: 'x', canvas: null, ctx: null, slider: null },
-            coronal: { plane: 'coronal', axis: 'y', canvas: null, ctx: null, slider: null }
+        // Compare view state
+        let compareState = {
+            a: { study: null, series: null, plane: 'axial', dims: null },
+            b: { study: null, series: null, plane: 'axial', dims: null }
         };
+        let syncSlices = false;
 
-        // Initialize view elements
-        Object.keys(views).forEach(name => {
-            views[name].canvas = document.getElementById(`${name}-canvas`);
-            views[name].ctx = views[name].canvas.getContext('2d');
-            views[name].slider = document.getElementById(`${name}-slider`);
+        // ========================================
+        // DATA POINTS STATE & FUNCTIONS
+        // ========================================
+
+        let dataPoints = [];
+        let addPointMode = false;
+        const POINT_HIGHLIGHT_COLOR = '#00ff00';  // Bright green
+
+        function generatePointId() {
+            return `dp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        }
+
+        function pointExistsAt(study, series, x, y, z) {
+            return dataPoints.find(p =>
+                p.study === study &&
+                p.series === series &&
+                p.original.voxel.x === x &&
+                p.original.voxel.y === y &&
+                p.original.voxel.z === z
+            );
+        }
+
+        function getSliceForView(view, x, y, z) {
+            if (view === 'axial') return z;
+            if (view === 'sagittal') return x;
+            if (view === 'coronal') return y;
+            return 0;
+        }
+
+        function getPointSliceForView(point, viewType) {
+            const v = point.current.voxel;
+            if (viewType === 'axial') return v.z;
+            if (viewType === 'sagittal') return v.x;
+            if (viewType === 'coronal') return v.y;
+            return 0;
+        }
+
+        function getPointCanvasPosition(point, viewType, canvasWidth, canvasHeight, dimWidth, dimHeight) {
+            const v = point.current.voxel;
+            let px, py;
+
+            if (viewType === 'axial') {
+                px = v.x;
+                py = v.y;
+            } else if (viewType === 'sagittal') {
+                px = v.y;
+                py = v.z;
+            } else { // coronal
+                px = v.x;
+                py = v.z;
+            }
+
+            // Scale to canvas coordinates
+            const scaleX = canvasWidth / dimWidth;
+            const scaleY = canvasHeight / dimHeight;
+
+            return [px * scaleX, py * scaleY];
+        }
+
+        async function addDataPoint(study, series, view, x, y, z) {
+            // Check if point already exists
+            if (pointExistsAt(study, series, x, y, z)) {
+                console.log('Point already exists at this location');
+                return null;
+            }
+
+            // Fetch full metadata from API
+            const metadata = await loadVoxelMetadata(study, series, x, y, z);
+            if (!metadata) {
+                console.error('Failed to load metadata for point');
+                return null;
+            }
+
+            const point = {
+                id: generatePointId(),
+                timestamp: new Date().toISOString(),
+                study,
+                series,
+                sourceView: view,
+                sourceSlice: getSliceForView(view, x, y, z),
+                original: {
+                    voxel: { x, y, z },
+                    world: metadata.voxel.worldPos,
+                    rawValue: metadata.voxel.rawValue,
+                    normValue: metadata.voxel.normValue
+                },
+                metadata: { ...metadata },
+                visibleIn: ['axial', 'sagittal', 'coronal'],
+                transformations: [],
+                current: {
+                    voxel: { x, y, z },
+                    world: metadata.voxel.worldPos,
+                    value: metadata.voxel.rawValue
+                }
+            };
+
+            dataPoints.push(point);
+            renderDataPointsTable();
+            redrawAllCanvases();
+
+            return point;
+        }
+
+        function deleteDataPoint(pointId) {
+            dataPoints = dataPoints.filter(p => p.id !== pointId);
+            renderDataPointsTable();
+            redrawAllCanvases();
+        }
+
+        function clearAllDataPoints() {
+            dataPoints = [];
+            renderDataPointsTable();
+            redrawAllCanvases();
+        }
+
+        function togglePointVisibility(pointId, view) {
+            const point = dataPoints.find(p => p.id === pointId);
+            if (!point) return;
+
+            const idx = point.visibleIn.indexOf(view);
+            if (idx >= 0) {
+                point.visibleIn.splice(idx, 1);
+            } else {
+                point.visibleIn.push(view);
+            }
+
+            renderDataPointsTable();
+            redrawAllCanvases();
+        }
+
+        function toggleAddPointMode() {
+            addPointMode = !addPointMode;
+            const btn = document.getElementById('add-point-toggle');
+            if (addPointMode) {
+                btn.textContent = '+ Add Points: ON';
+                btn.classList.add('active');
+                document.body.classList.add('add-point-mode');
+            } else {
+                btn.textContent = '+ Add Points: OFF';
+                btn.classList.remove('active');
+                document.body.classList.remove('add-point-mode');
+            }
+        }
+
+        function renderDataPointsTable() {
+            const container = document.getElementById('data-points-container');
+            const title = document.getElementById('data-points-title');
+            const tbody = document.getElementById('data-points-tbody');
+
+            title.textContent = `Data Points (${dataPoints.length})`;
+
+            if (dataPoints.length === 0) {
+                container.classList.remove('visible');
+                document.body.classList.remove('data-points-visible');
+                tbody.innerHTML = '';
+                return;
+            }
+
+            container.classList.add('visible');
+            document.body.classList.add('data-points-visible');
+
+            let html = '';
+            dataPoints.forEach((point, index) => {
+                const v = point.original.voxel;
+                const meta = point.metadata;
+
+                // Truncate long strings
+                const studyShort = point.study.length > 10 ? point.study.slice(0, 10) + '...' : point.study;
+                const seriesShort = point.series.length > 12 ? point.series.slice(0, 12) + '...' : point.series;
+
+                // Visibility toggle buttons
+                const axialActive = point.visibleIn.includes('axial') ? 'active' : '';
+                const sagittalActive = point.visibleIn.includes('sagittal') ? 'active' : '';
+                const coronalActive = point.visibleIn.includes('coronal') ? 'active' : '';
+
+                html += `
+                    <tr class="point-row" data-point-id="${point.id}" data-index="${index}">
+                        <td>${index + 1}</td>
+                        <td title="${point.study}">${studyShort}</td>
+                        <td title="${point.series}">${seriesShort}</td>
+                        <td>${point.sourceView.charAt(0).toUpperCase() + point.sourceView.slice(1)}</td>
+                        <td>${v.x},${v.y},${v.z}</td>
+                        <td>${Math.round(point.original.rawValue)}</td>
+                        <td>
+                            <div style="display: flex; align-items: center;">
+                                <div class="visibility-toggles">
+                                    <button class="visibility-toggle ${axialActive}" data-view="axial" data-point-id="${point.id}" title="Axial">A</button>
+                                    <button class="visibility-toggle ${sagittalActive}" data-view="sagittal" data-point-id="${point.id}" title="Sagittal">S</button>
+                                    <button class="visibility-toggle ${coronalActive}" data-view="coronal" data-point-id="${point.id}" title="Coronal">C</button>
+                                </div>
+                                <button class="delete-point-btn" data-point-id="${point.id}" title="Delete point">×</button>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr class="details-row" data-point-id="${point.id}">
+                        <td colspan="7">
+                            ${formatPointDetails(point)}
+                        </td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+
+            // Add event listeners for row expansion
+            tbody.querySelectorAll('.point-row').forEach(row => {
+                row.addEventListener('click', (e) => {
+                    // Don't expand if clicking on buttons
+                    if (e.target.closest('button')) return;
+
+                    const pointId = row.dataset.pointId;
+                    const detailsRow = tbody.querySelector(`.details-row[data-point-id="${pointId}"]`);
+
+                    row.classList.toggle('expanded');
+                    detailsRow.classList.toggle('visible');
+                });
+            });
+
+            // Add event listeners for visibility toggles
+            tbody.querySelectorAll('.visibility-toggle').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const pointId = btn.dataset.pointId;
+                    const view = btn.dataset.view;
+                    togglePointVisibility(pointId, view);
+                });
+            });
+
+            // Add event listeners for delete buttons
+            tbody.querySelectorAll('.delete-point-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const pointId = btn.dataset.pointId;
+                    deleteDataPoint(pointId);
+                });
+            });
+        }
+
+        function formatPointDetails(point) {
+            const v = point.original.voxel;
+            const world = point.original.world;
+            const meta = point.metadata;
+            const mri = meta.mri || {};
+            const spatial = meta.spatial || {};
+            const study = meta.study || {};
+            const series = meta.series || {};
+            const inst = meta.instance || {};
+            const eq = meta.equipment || {};
+
+            let dateStr = study.date || '';
+            if (dateStr.length === 8) {
+                dateStr = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6)}`;
+            }
+
+            let timeStr = inst.acquisitionTime || '';
+            if (timeStr.length >= 6) {
+                timeStr = `${timeStr.slice(0,2)}:${timeStr.slice(2,4)}:${timeStr.slice(4,6)}`;
+            }
+
+            return `
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                    <div>
+                        <strong style="color: #4fc3f7;">Position & Value</strong><br>
+                        <span class="probe-label">Voxel:</span> <span class="probe-value">[${v.x}, ${v.y}, ${v.z}]</span><br>
+                        <span class="probe-label">World:</span> <span class="probe-value">[${world.map(w => w.toFixed(2)).join(', ')}] mm</span><br>
+                        <span class="probe-label">Raw Value:</span> <span class="probe-value">${Math.round(point.original.rawValue)}</span><br>
+                        <span class="probe-label">Norm Value:</span> <span class="probe-value">${point.original.normValue.toFixed(4)}</span>
+                    </div>
+                    <div>
+                        <strong style="color: #4fc3f7;">MRI Parameters</strong><br>
+                        <span class="probe-label">TR:</span> <span class="probe-value">${mri.TR || '-'} ms</span><br>
+                        <span class="probe-label">TE:</span> <span class="probe-value">${mri.TE || '-'} ms</span><br>
+                        <span class="probe-label">TI:</span> <span class="probe-value">${mri.TI || '-'} ms</span><br>
+                        <span class="probe-label">Flip Angle:</span> <span class="probe-value">${mri.flipAngle || '-'}°</span><br>
+                        <span class="probe-label">Field:</span> <span class="probe-value">${mri.fieldStrength || '-'} T</span>
+                    </div>
+                    <div>
+                        <strong style="color: #4fc3f7;">Spatial Info</strong><br>
+                        <span class="probe-label">Slice Location:</span> <span class="probe-value">${spatial.sliceLocation?.toFixed(2) || '-'} mm</span><br>
+                        <span class="probe-label">Slice Thickness:</span> <span class="probe-value">${spatial.sliceThickness || '-'} mm</span><br>
+                        <span class="probe-label">Series:</span> <span class="probe-value">${series.description || '-'}</span><br>
+                        <span class="probe-label">Timestamp:</span> <span class="probe-value">${point.timestamp}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function drawDataPointHighlights(canvas, ctx, viewType, currentSlice, study, series) {
+            // Get canvas display dimensions and actual dimensions
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+
+            // Calculate dimension sizes based on view
+            let dimWidth, dimHeight;
+            if (viewType === 'axial') {
+                dimWidth = volumeDims.x || canvasWidth;
+                dimHeight = volumeDims.y || canvasHeight;
+            } else if (viewType === 'sagittal') {
+                dimWidth = volumeDims.y || canvasWidth;
+                dimHeight = volumeDims.z || canvasHeight;
+            } else { // coronal
+                dimWidth = volumeDims.x || canvasWidth;
+                dimHeight = volumeDims.z || canvasHeight;
+            }
+
+            dataPoints.forEach(point => {
+                // Only show points for current study/series
+                if (point.study !== study || point.series !== series) return;
+
+                // Check if this point should be visible in this view
+                if (!point.visibleIn.includes(viewType)) return;
+
+                // Check if point is on current slice for this view
+                const pointSlice = getPointSliceForView(point, viewType);
+                if (pointSlice !== currentSlice) return;
+
+                // Get 2D position for this view
+                const [px, py] = getPointCanvasPosition(point, viewType, canvasWidth, canvasHeight, dimWidth, dimHeight);
+
+                // Draw highlight square (bright green with white border)
+                ctx.fillStyle = POINT_HIGHLIGHT_COLOR;
+                ctx.fillRect(px - 4, py - 4, 8, 8);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(px - 4, py - 4, 8, 8);
+            });
+        }
+
+        function redrawAllCanvases() {
+            // Redraw all ortho panels in volume and triplanar views
+            ['volume', 'triplanar'].forEach(context => {
+                ['axial', 'sagittal', 'coronal'].forEach(viewType => {
+                    const key = `${context}-${viewType}`;
+                    const panel = orthoPanels[key];
+                    if (panel && currentStudy && currentSeries) {
+                        const sliceVal = parseInt(panel.slider.value);
+                        loadOrthoslice(panel.canvas, currentStudy, currentSeries, viewType, sliceVal);
+                    }
+                });
+            });
+
+            // Redraw single view
+            if (currentStudy && currentSeries && singleCanvas) {
+                const plane = singlePlane.value;
+                const sliceVal = parseInt(singleSlider.value);
+                loadOrthoslice(singleCanvas, currentStudy, currentSeries, plane, sliceVal);
+            }
+
+            // Redraw compare panels
+            ['a', 'b'].forEach(panelId => {
+                const state = compareState[panelId];
+                if (state.study && state.series) {
+                    loadCompareSlice(panelId);
+                }
+            });
+        }
+
+        // Setup Add Point toggle button
+        document.getElementById('add-point-toggle').addEventListener('click', toggleAddPointMode);
+
+        // Setup Clear All button
+        document.getElementById('clear-all-points').addEventListener('click', () => {
+            if (dataPoints.length > 0 && confirm('Are you sure you want to clear all data points?')) {
+                clearAllDataPoints();
+            }
         });
 
-        // Grayscale color mapping
+        // Setup Collapse button
+        document.getElementById('collapse-data-points').addEventListener('click', () => {
+            const container = document.getElementById('data-points-container');
+            container.classList.remove('visible');
+            document.body.classList.remove('data-points-visible');
+        });
+
+        // ========================================
+        // UTILITY FUNCTIONS
+        // ========================================
+
+        // Storage keys for remembering last selection
+        const STORAGE_KEY_LAST_STUDY = 'openradiomics_lastStudy';
+        const STORAGE_KEY_LAST_SEQUENCE = 'openradiomics_lastSequence';
+
+        // Save last used selection
+        function saveLastSelection(studyId, seriesName) {
+            if (studyId) localStorage.setItem(STORAGE_KEY_LAST_STUDY, studyId);
+            if (seriesName) localStorage.setItem(STORAGE_KEY_LAST_SEQUENCE, seriesName);
+        }
+
+        // Get last used selection
+        function getLastSelection() {
+            return {
+                study: localStorage.getItem(STORAGE_KEY_LAST_STUDY),
+                sequence: localStorage.getItem(STORAGE_KEY_LAST_SEQUENCE)
+            };
+        }
+
+        function showLoading(show) {
+            document.getElementById('loading-indicator').classList.toggle('active', show);
+        }
+
+        function setStatus(text) {
+            document.getElementById('status-text').textContent = text;
+        }
+
         function intensityToColor(intensity) {
             return new THREE.Color(intensity, intensity, intensity);
         }
 
-        // Create voxel visualization with threshold filtering
+        // ========================================
+        // 3D VOXEL VISUALIZATION
+        // ========================================
+
         function createVoxels(threshold) {
             if (!volumeData) return;
 
-            // Remove previous mesh
             if (currentMesh) {
                 scene.remove(currentMesh);
                 currentMesh.geometry.dispose();
                 currentMesh.material.dispose();
             }
 
-            // Filter voxels by threshold
             const filteredVoxels = allVoxels.filter(v => v.i >= threshold);
             const count = filteredVoxels.length;
 
             if (count === 0) {
-                document.getElementById('status').textContent =
+                document.getElementById('volume-status').textContent =
                     `Dimensions: ${volumeData.dimensions.join(' × ')}\nNo voxels above threshold`;
                 return;
             }
 
-            // Calculate spacing ratios
             const xSpacing = volumeData.pixelSpacing[1] || 1;
             const ySpacing = volumeData.pixelSpacing[0] || 1;
             const zSpacing = volumeData.sliceThickness || 1;
@@ -418,7 +1504,6 @@
 
             const step = volumeData.step;
 
-            // Create instanced mesh
             const geometry = new THREE.BoxGeometry(
                 step * 0.9,
                 step * 0.9 * zScale,
@@ -432,15 +1517,9 @@
 
             for (let i = 0; i < count; i++) {
                 const v = filteredVoxels[i];
-
-                dummy.position.set(
-                    v.x,
-                    v.z * zScale,
-                    v.y * yScale
-                );
+                dummy.position.set(v.x, v.z * zScale, v.y * yScale);
                 dummy.updateMatrix();
                 mesh.setMatrixAt(i, dummy.matrix);
-
                 mesh.setColorAt(i, intensityToColor(v.i));
             }
 
@@ -450,20 +1529,17 @@
             scene.add(mesh);
             currentMesh = mesh;
 
-            // Store scale for slice plane
             volumeData.zScale = zScale;
 
-            document.getElementById('status').textContent =
-                `Dimensions: ${volumeData.dimensions.join(' × ')}\n` +
-                `Spacing: ${xSpacing.toFixed(2)} × ${ySpacing.toFixed(2)} × ${zSpacing.toFixed(2)} mm\n` +
+            document.getElementById('volume-status').textContent =
+                `Dims: ${volumeData.dimensions.join('×')} | ` +
+                `Spacing: ${xSpacing.toFixed(1)}×${ySpacing.toFixed(1)}×${zSpacing.toFixed(1)}mm | ` +
                 `Voxels: ${count.toLocaleString()}`;
         }
 
-        // Update slice plane indicator in 3D view
         function updateSlicePlane(sliceNum, totalSlices) {
             if (!volumeData) return;
 
-            // Remove old plane
             if (slicePlane) {
                 scene.remove(slicePlane);
                 slicePlane.geometry.dispose();
@@ -473,10 +1549,8 @@
             const [nx, ny, nz] = volumeData.dimensions;
             const zScale = volumeData.zScale || 1;
 
-            // Calculate Z position for this slice
             const zPos = (sliceNum - nz / 2) * zScale;
 
-            // Create a semi-transparent plane
             const planeGeom = new THREE.PlaneGeometry(nx * 1.2, ny * 1.2);
             const planeMat = new THREE.MeshBasicMaterial({
                 color: 0x4fc3f7,
@@ -492,79 +1566,76 @@
             scene.add(slicePlane);
         }
 
-        // Orthogonal slice rendering
-        async function loadOrthoslice(viewName, sliceIndex) {
-            if (!currentStudy || !currentSeries) return;
+        // ========================================
+        // ORTHOSLICE RENDERING
+        // ========================================
 
-            const view = views[viewName];
+        async function loadOrthoslice(canvas, study, series, plane, sliceIndex) {
+            if (!study || !series) return;
+
             try {
                 const response = await fetch(
-                    `/api/orthoslice/${encodeURIComponent(currentStudy)}/${encodeURIComponent(currentSeries)}/${view.plane}/${sliceIndex}`
+                    `/api/orthoslice/${encodeURIComponent(study)}/${encodeURIComponent(series)}/${plane}/${sliceIndex}`
                 );
                 const data = await response.json();
 
                 if (data.error) {
-                    console.error(`${viewName} slice error:`, data.error);
-                    return;
+                    console.error(`Slice error:`, data.error);
+                    return null;
                 }
 
-                // Resize canvas to match image
-                view.canvas.width = data.width;
-                view.canvas.height = data.height;
+                canvas.width = data.width;
+                canvas.height = data.height;
 
-                // Create ImageData
-                const imageData = view.ctx.createImageData(data.width, data.height);
+                const ctx = canvas.getContext('2d');
+                const imageData = ctx.createImageData(data.width, data.height);
 
-                // Fill pixel data (grayscale)
                 for (let i = 0; i < data.pixels.length; i++) {
                     const val = data.pixels[i];
                     const idx = i * 4;
-                    imageData.data[idx] = val;     // R
-                    imageData.data[idx + 1] = val; // G
-                    imageData.data[idx + 2] = val; // B
-                    imageData.data[idx + 3] = 255; // A
+                    imageData.data[idx] = val;
+                    imageData.data[idx + 1] = val;
+                    imageData.data[idx + 2] = val;
+                    imageData.data[idx + 3] = 255;
                 }
 
-                view.ctx.putImageData(imageData, 0, 0);
+                ctx.putImageData(imageData, 0, 0);
 
-                // Update 3D slice plane for axial view only
-                if (viewName === 'axial') {
-                    updateSlicePlane(sliceIndex, data.totalSlices);
-                }
+                // Draw data point highlights on top of the slice
+                drawDataPointHighlights(canvas, ctx, plane, sliceIndex, study, series);
 
+                return data;
             } catch (error) {
-                console.error(`Error loading ${viewName} slice:`, error);
+                console.error(`Error loading slice:`, error);
+                return null;
             }
         }
 
-        // Load voxel metadata and display in probe
-        async function loadVoxelMetadata(viewName, x, y, z) {
-            if (!currentStudy || !currentSeries) return;
+        // ========================================
+        // METADATA / DATA PROBE
+        // ========================================
+
+        async function loadVoxelMetadata(study, series, x, y, z) {
+            if (!study || !series) return null;
 
             try {
                 const response = await fetch(
-                    `/api/voxel-metadata/${encodeURIComponent(currentStudy)}/${encodeURIComponent(currentSeries)}/${x}/${y}/${z}`
+                    `/api/voxel-metadata/${encodeURIComponent(study)}/${encodeURIComponent(series)}/${x}/${y}/${z}`
                 );
                 const data = await response.json();
 
                 if (data.error) {
                     console.error('Metadata error:', data.error);
-                    return;
+                    return null;
                 }
 
-                // Format and display metadata
-                const probeContent = document.getElementById(`${viewName}-probe-content`);
-                probeContent.innerHTML = formatMetadata(data);
-
-                // Expand probe
-                document.getElementById(`${viewName}-probe`).classList.add('expanded');
-
+                return data;
             } catch (error) {
                 console.error('Error loading metadata:', error);
+                return null;
             }
         }
 
-        // Format metadata for display
         function formatMetadata(data) {
             const v = data.voxel;
             const mri = data.mri;
@@ -575,220 +1646,567 @@
             const eq = data.equipment;
             const disp = data.display;
 
-            // Format date
             let dateStr = study.date || '';
             if (dateStr.length === 8) {
                 dateStr = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6)}`;
             }
 
-            // Format time
             let timeStr = inst.acquisitionTime || '';
             if (timeStr.length >= 6) {
                 timeStr = `${timeStr.slice(0,2)}:${timeStr.slice(2,4)}:${timeStr.slice(4,6)}`;
             }
 
             return `
-                <div class="section">
-                    <span class="label">Position:</span> <span class="value">X=${v.x} Y=${v.y} Z=${v.z}</span><br>
-                    <span class="label">World:</span> <span class="value">[${v.worldPos.join(', ')}] mm</span><br>
-                    <span class="label">Value:</span> <span class="value">${Math.round(v.rawValue)} (raw) | ${v.normValue.toFixed(3)} (norm)</span>
+                <div class="probe-section">
+                    <span class="probe-label">Position:</span> <span class="probe-value">X=${v.x} Y=${v.y} Z=${v.z}</span><br>
+                    <span class="probe-label">World:</span> <span class="probe-value">[${v.worldPos.join(', ')}] mm</span><br>
+                    <span class="probe-label">Value:</span> <span class="probe-value">${Math.round(v.rawValue)} (raw) | ${v.normValue.toFixed(3)} (norm)</span>
                 </div>
-                <div class="section">
-                    <span class="label">MRI:</span> <span class="value">TR=${mri.TR || '-'}ms TE=${mri.TE || '-'}ms FA=${mri.flipAngle || '-'}°</span><br>
-                    <span class="label">Field:</span> <span class="value">${mri.fieldStrength || '-'}T | ${mri.scanningSequence || '-'} | ${mri.acquisitionType || '-'}</span>
+                <div class="probe-section">
+                    <span class="probe-label">MRI:</span> <span class="probe-value">TR=${mri.TR || '-'}ms TE=${mri.TE || '-'}ms FA=${mri.flipAngle || '-'}°</span><br>
+                    <span class="probe-label">Field:</span> <span class="probe-value">${mri.fieldStrength || '-'}T | ${mri.scanningSequence || '-'}</span>
                 </div>
-                <div class="section">
-                    <span class="label">Slice:</span> <span class="value">${spatial.sliceLocation?.toFixed(2) || '-'}mm | Thick: ${spatial.sliceThickness || '-'}mm</span><br>
-                    <span class="label">Series:</span> <span class="value">${series.description} | #${inst.number}</span><br>
-                    <span class="label">Time:</span> <span class="value">${dateStr} ${timeStr}</span>
-                </div>
-                <div class="section">
-                    <span class="label">Scanner:</span> <span class="value">${eq.manufacturer || '-'} ${eq.model || ''}</span><br>
-                    <span class="label">Window:</span> <span class="value">C=${disp.windowCenter || '-'} W=${disp.windowWidth || '-'}</span>
+                <div class="probe-section">
+                    <span class="probe-label">Slice:</span> <span class="probe-value">${spatial.sliceLocation?.toFixed(2) || '-'}mm | Thick: ${spatial.sliceThickness || '-'}mm</span><br>
+                    <span class="probe-label">Series:</span> <span class="probe-value">${series.description}</span>
                 </div>
             `;
         }
 
-        // Handle canvas click for probing
-        function setupCanvasClickHandler(viewName) {
-            const view = views[viewName];
-            view.canvas.addEventListener('click', (e) => {
-                if (!currentStudy || !currentSeries) return;
-
-                const rect = view.canvas.getBoundingClientRect();
-                const scaleX = view.canvas.width / rect.width;
-                const scaleY = view.canvas.height / rect.height;
-
-                const canvasX = Math.floor((e.clientX - rect.left) * scaleX);
-                const canvasY = Math.floor((e.clientY - rect.top) * scaleY);
-
-                let x, y, z;
-
-                if (viewName === 'axial') {
-                    // XY plane at Z
-                    x = canvasX;
-                    y = canvasY;
-                    z = parseInt(view.slider.value);
-                } else if (viewName === 'sagittal') {
-                    // YZ plane at X (canvas shows Y horizontal, Z vertical)
-                    x = parseInt(view.slider.value);
-                    y = canvasX;
-                    z = canvasY;
-                } else if (viewName === 'coronal') {
-                    // XZ plane at Y (canvas shows X horizontal, Z vertical)
-                    x = canvasX;
-                    y = parseInt(view.slider.value);
-                    z = canvasY;
-                }
-
-                loadVoxelMetadata(viewName, x, y, z);
-            });
+        function formatMetadataCompact(data) {
+            const v = data.voxel;
+            const mri = data.mri;
+            return `
+                <span class="probe-label">Pos:</span> <span class="probe-value">[${v.x}, ${v.y}, ${v.z}]</span> |
+                <span class="probe-label">Val:</span> <span class="probe-value">${Math.round(v.rawValue)}</span> |
+                <span class="probe-label">TR/TE:</span> <span class="probe-value">${mri.TR || '-'}/${mri.TE || '-'}ms</span>
+            `;
         }
 
-        // Setup click handlers for all views
-        Object.keys(views).forEach(name => setupCanvasClickHandler(name));
+        // ========================================
+        // API: LOAD STUDIES
+        // ========================================
 
-        // Load studies
         async function loadStudies() {
             try {
                 const response = await fetch('/api/studies');
-                const studies = await response.json();
+                studiesCache = await response.json();
 
-                const select = document.getElementById('study');
-                select.innerHTML = '<option value="">-- Select a study --</option>';
-
-                studies.forEach(study => {
+                // Populate main study dropdown
+                const mainSelect = document.getElementById('study');
+                mainSelect.innerHTML = '<option value="">-- Select a study --</option>';
+                studiesCache.forEach(study => {
                     const option = document.createElement('option');
                     option.value = study.id;
-                    option.textContent = `${study.date} - ${study.description} (${study.sequences} seq, ${study.slices} slices)`;
-                    select.appendChild(option);
+                    option.textContent = `${study.date} - ${study.description} (${study.sequences} seq)`;
+                    mainSelect.appendChild(option);
                 });
 
-                document.getElementById('status').textContent = `${studies.length} studies available`;
+                // Populate compare dropdowns
+                populateCompareStudyDropdowns();
+
+                setStatus(`${studiesCache.length} studies available`);
+
+                // Auto-select: prefer last used, fallback to first study
+                const last = getLastSelection();
+                let targetStudy = null;
+
+                if (last.study && studiesCache.some(s => s.id === last.study)) {
+                    targetStudy = last.study;
+                } else if (studiesCache.length > 0) {
+                    targetStudy = studiesCache[0].id;
+                }
+
+                if (targetStudy) {
+                    mainSelect.value = targetStudy;
+                    currentStudy = targetStudy;
+
+                    // Load sequences
+                    const sequences = await loadSequences(targetStudy, document.getElementById('sequence'));
+
+                    // Auto-select sequence: prefer last used, fallback to first
+                    let targetSequence = null;
+                    if (last.sequence && sequences.some(s => s.name === last.sequence)) {
+                        targetSequence = last.sequence;
+                    } else if (sequences.length > 0) {
+                        targetSequence = sequences[0].name;
+                    }
+
+                    if (targetSequence) {
+                        document.getElementById('sequence').value = targetSequence;
+                        loadVolume(targetStudy, targetSequence);
+                    }
+                }
             } catch (error) {
                 console.error('Error loading studies:', error);
-                document.getElementById('status').textContent = `Error: ${error.message}`;
+                setStatus(`Error: ${error.message}`);
             }
         }
 
-        // Load sequences for selected study
-        async function loadSequences(studyId) {
-            const select = document.getElementById('sequence');
+        function populateCompareStudyDropdowns() {
+            ['a', 'b'].forEach(panel => {
+                const select = document.getElementById(`compare-study-${panel}`);
+                select.innerHTML = '<option value="">-- Select --</option>';
+                studiesCache.forEach(study => {
+                    const option = document.createElement('option');
+                    option.value = study.id;
+                    option.textContent = `${study.date} - ${study.description}`;
+                    select.appendChild(option);
+                });
+            });
+        }
 
+        // ========================================
+        // API: LOAD SEQUENCES
+        // ========================================
+
+        async function loadSequences(studyId, targetSelect) {
             if (!studyId) {
-                select.innerHTML = '<option value="">-- Select a study first --</option>';
-                select.disabled = true;
-                return;
+                targetSelect.innerHTML = '<option value="">-- Select study --</option>';
+                targetSelect.disabled = true;
+                return [];
             }
 
             try {
                 const response = await fetch(`/api/sequences/${encodeURIComponent(studyId)}`);
                 const sequences = await response.json();
 
-                select.innerHTML = '<option value="">-- Select a sequence --</option>';
-
+                targetSelect.innerHTML = '<option value="">-- Select --</option>';
                 sequences.forEach(seq => {
                     const option = document.createElement('option');
                     option.value = seq.name;
                     option.textContent = `${seq.name} (${seq.slices} slices)`;
-                    select.appendChild(option);
+                    targetSelect.appendChild(option);
                 });
 
-                select.disabled = false;
-                document.getElementById('status').textContent = `${sequences.length} sequences available`;
+                targetSelect.disabled = false;
+                return sequences;
             } catch (error) {
                 console.error('Error loading sequences:', error);
-                document.getElementById('status').textContent = `Error: ${error.message}`;
+                return [];
             }
         }
 
-        // Load volume for selected study and sequence
+        // ========================================
+        // API: GET VOLUME INFO (dimensions)
+        // ========================================
+
+        async function getVolumeInfo(studyId, seriesName) {
+            try {
+                const response = await fetch(`/api/volume-info/${encodeURIComponent(studyId)}/${encodeURIComponent(seriesName)}`);
+                const info = await response.json();
+                if (info.error) return null;
+                return info.dimensions;
+            } catch (error) {
+                console.error('Error getting volume info:', error);
+                return null;
+            }
+        }
+
+        // ========================================
+        // MAIN VOLUME LOADER
+        // ========================================
+
         async function loadVolume(studyId, seriesName) {
             if (!studyId || !seriesName) return;
 
             currentStudy = studyId;
             currentSeries = seriesName;
-            const loading = document.getElementById('loading');
-            const status = document.getElementById('status');
-
-            loading.classList.add('active');
-            status.textContent = '';
+            showLoading(true);
 
             try {
-                // First get volume info for dimensions
-                const infoResponse = await fetch(`/api/volume-info/${encodeURIComponent(studyId)}/${encodeURIComponent(seriesName)}`);
-                const info = await infoResponse.json();
-
-                if (info.error) {
-                    status.textContent = `Error: ${info.error}`;
+                // Get volume dimensions
+                const dims = await getVolumeInfo(studyId, seriesName);
+                if (!dims) {
+                    setStatus('Error loading volume info');
                     return;
                 }
 
-                volumeDims = info.dimensions;
+                volumeDims = dims;
 
-                // Update dimension displays
-                document.getElementById('axial-dims').textContent = `${volumeDims.x}×${volumeDims.y}`;
-                document.getElementById('sagittal-dims').textContent = `${volumeDims.y}×${volumeDims.z}`;
-                document.getElementById('coronal-dims').textContent = `${volumeDims.x}×${volumeDims.z}`;
+                // Update all ortho panels that use main study/series
+                updateOrthoPanelsForMainVolume();
 
-                // Setup sliders for each view
-                const axialSlider = views.axial.slider;
-                axialSlider.max = volumeDims.z - 1;
-                axialSlider.value = Math.floor(volumeDims.z / 2);
-                axialSlider.disabled = false;
-                document.getElementById('axial-value').textContent = `${axialSlider.value} / ${volumeDims.z - 1}`;
+                // Load 3D volume data (only if in volume view)
+                if (currentViewMode === 'volume') {
+                    const response = await fetch(`/api/volume/${encodeURIComponent(studyId)}/${encodeURIComponent(seriesName)}`);
+                    const data = await response.json();
 
-                const sagittalSlider = views.sagittal.slider;
-                sagittalSlider.max = volumeDims.x - 1;
-                sagittalSlider.value = Math.floor(volumeDims.x / 2);
-                sagittalSlider.disabled = false;
-                document.getElementById('sagittal-value').textContent = `${sagittalSlider.value} / ${volumeDims.x - 1}`;
+                    if (data.error) {
+                        setStatus(`Error: ${data.error}`);
+                        return;
+                    }
 
-                const coronalSlider = views.coronal.slider;
-                coronalSlider.max = volumeDims.y - 1;
-                coronalSlider.value = Math.floor(volumeDims.y / 2);
-                coronalSlider.disabled = false;
-                document.getElementById('coronal-value').textContent = `${coronalSlider.value} / ${volumeDims.y - 1}`;
+                    volumeData = data;
+                    allVoxels = data.voxels;
 
-                // Load initial slices for all views
-                await Promise.all([
-                    loadOrthoslice('axial', parseInt(axialSlider.value)),
-                    loadOrthoslice('sagittal', parseInt(sagittalSlider.value)),
-                    loadOrthoslice('coronal', parseInt(coronalSlider.value))
-                ]);
-
-                // Now load the 3D volume data
-                const response = await fetch(`/api/volume/${encodeURIComponent(studyId)}/${encodeURIComponent(seriesName)}`);
-                const data = await response.json();
-
-                if (data.error) {
-                    status.textContent = `Error: ${data.error}`;
-                    return;
+                    const threshold = parseFloat(document.getElementById('threshold').value);
+                    createVoxels(threshold);
                 }
 
-                // Store data for threshold filtering
-                volumeData = data;
-                allVoxels = data.voxels;
-
-                // Create initial 3D visualization
-                const threshold = parseFloat(document.getElementById('threshold').value);
-                createVoxels(threshold);
+                setStatus(`Loaded: ${volumeDims.x}×${volumeDims.y}×${volumeDims.z}`);
 
             } catch (error) {
                 console.error('Error loading volume:', error);
-                status.textContent = `Error: ${error.message}`;
+                setStatus(`Error: ${error.message}`);
             } finally {
-                loading.classList.remove('active');
+                showLoading(false);
             }
         }
 
-        // Event listeners
-        document.getElementById('study').addEventListener('change', (e) => {
-            const studyId = e.target.value;
-            currentStudy = studyId;
-            loadSequences(studyId);
+        // ========================================
+        // ORTHO PANEL MANAGEMENT
+        // ========================================
 
-            // Clear current 3D visualization
+        function setupOrthoPanel(panel) {
+            const viewType = panel.dataset.view;
+            const context = panel.dataset.context;
+
+            const canvas = panel.querySelector('.ortho-canvas');
+            const slider = panel.querySelector('.slice-slider');
+            const sliderValue = panel.querySelector('.slider-value');
+            const dimsSpan = panel.querySelector('.dims');
+            const probeEl = panel.querySelector('.ortho-probe');
+            const probeContent = panel.querySelector('.ortho-probe-content');
+
+            // Slider change handler
+            slider.addEventListener('input', async (e) => {
+                const value = parseInt(e.target.value);
+                const max = parseInt(e.target.max);
+                sliderValue.textContent = `${value}/${max}`;
+
+                // Close probe
+                probeEl.classList.remove('expanded');
+
+                if (currentStudy && currentSeries) {
+                    const data = await loadOrthoslice(canvas, currentStudy, currentSeries, viewType, value);
+
+                    // Update 3D slice plane for axial only
+                    if (viewType === 'axial' && context === 'volume' && data) {
+                        updateSlicePlane(value, data.totalSlices);
+                    }
+                }
+            });
+
+            // Canvas click handler for probing or adding points
+            canvas.addEventListener('click', async (e) => {
+                if (!currentStudy || !currentSeries) return;
+
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+
+                const canvasX = Math.floor((e.clientX - rect.left) * scaleX);
+                const canvasY = Math.floor((e.clientY - rect.top) * scaleY);
+
+                let x, y, z;
+                const sliceVal = parseInt(slider.value);
+
+                if (viewType === 'axial') {
+                    x = canvasX; y = canvasY; z = sliceVal;
+                } else if (viewType === 'sagittal') {
+                    x = sliceVal; y = canvasX; z = canvasY;
+                } else {
+                    x = canvasX; y = sliceVal; z = canvasY;
+                }
+
+                // If add point mode is active, add a data point
+                if (addPointMode) {
+                    await addDataPoint(currentStudy, currentSeries, viewType, x, y, z);
+                    return;
+                }
+
+                // Otherwise, probe the voxel
+                const metadata = await loadVoxelMetadata(currentStudy, currentSeries, x, y, z);
+                if (metadata) {
+                    probeContent.innerHTML = formatMetadata(metadata);
+                    probeEl.classList.add('expanded');
+                }
+            });
+
+            return { canvas, slider, sliderValue, dimsSpan, probeEl, probeContent, viewType };
+        }
+
+        // Setup all ortho panels
+        const orthoPanels = {};
+        document.querySelectorAll('.ortho-panel').forEach(panel => {
+            const key = `${panel.dataset.context}-${panel.dataset.view}`;
+            orthoPanels[key] = setupOrthoPanel(panel);
+        });
+
+        function updateOrthoPanelsForMainVolume() {
+            // Update volume-view ortho panels
+            ['volume', 'triplanar'].forEach(context => {
+                updateOrthoPanel(context, 'axial', volumeDims.x, volumeDims.y, volumeDims.z);
+                updateOrthoPanel(context, 'sagittal', volumeDims.y, volumeDims.z, volumeDims.x);
+                updateOrthoPanel(context, 'coronal', volumeDims.x, volumeDims.z, volumeDims.y);
+            });
+
+            // Also update single view
+            updateSingleView();
+        }
+
+        function updateOrthoPanel(context, viewType, dimW, dimH, sliceMax) {
+            const key = `${context}-${viewType}`;
+            const panel = orthoPanels[key];
+            if (!panel) return;
+
+            panel.dimsSpan.textContent = `${dimW}×${dimH}`;
+            panel.slider.max = sliceMax - 1;
+            panel.slider.value = Math.floor(sliceMax / 2);
+            panel.slider.disabled = false;
+            panel.sliderValue.textContent = `${panel.slider.value}/${sliceMax - 1}`;
+
+            // Load initial slice
+            if (currentStudy && currentSeries) {
+                loadOrthoslice(panel.canvas, currentStudy, currentSeries, viewType, parseInt(panel.slider.value));
+            }
+        }
+
+        // ========================================
+        // SINGLE VIEW
+        // ========================================
+
+        const singleCanvas = document.getElementById('single-canvas');
+        const singleSlider = document.getElementById('single-slider');
+        const singleSliderValue = document.getElementById('single-slider-value');
+        const singlePlane = document.getElementById('single-plane');
+        const singleDims = document.getElementById('single-dims');
+        const singleProbe = document.getElementById('single-probe');
+
+        function updateSingleView() {
+            if (!volumeDims.x) return;
+
+            const plane = singlePlane.value;
+            let dimW, dimH, sliceMax;
+
+            if (plane === 'axial') {
+                dimW = volumeDims.x; dimH = volumeDims.y; sliceMax = volumeDims.z;
+            } else if (plane === 'sagittal') {
+                dimW = volumeDims.y; dimH = volumeDims.z; sliceMax = volumeDims.x;
+            } else {
+                dimW = volumeDims.x; dimH = volumeDims.z; sliceMax = volumeDims.y;
+            }
+
+            singleDims.textContent = `${dimW}×${dimH}`;
+            singleSlider.max = sliceMax - 1;
+            singleSlider.value = Math.floor(sliceMax / 2);
+            singleSlider.disabled = false;
+            singleSliderValue.textContent = `${singleSlider.value} / ${sliceMax - 1}`;
+
+            if (currentStudy && currentSeries) {
+                loadOrthoslice(singleCanvas, currentStudy, currentSeries, plane, parseInt(singleSlider.value));
+            }
+        }
+
+        singlePlane.addEventListener('change', updateSingleView);
+
+        singleSlider.addEventListener('input', async (e) => {
+            const value = parseInt(e.target.value);
+            const max = parseInt(e.target.max);
+            singleSliderValue.textContent = `${value} / ${max}`;
+
+            if (currentStudy && currentSeries) {
+                await loadOrthoslice(singleCanvas, currentStudy, currentSeries, singlePlane.value, value);
+            }
+        });
+
+        singleCanvas.addEventListener('click', async (e) => {
+            if (!currentStudy || !currentSeries) return;
+
+            const rect = singleCanvas.getBoundingClientRect();
+            const scaleX = singleCanvas.width / rect.width;
+            const scaleY = singleCanvas.height / rect.height;
+
+            const canvasX = Math.floor((e.clientX - rect.left) * scaleX);
+            const canvasY = Math.floor((e.clientY - rect.top) * scaleY);
+
+            const plane = singlePlane.value;
+            const sliceVal = parseInt(singleSlider.value);
+            let x, y, z;
+
+            if (plane === 'axial') {
+                x = canvasX; y = canvasY; z = sliceVal;
+            } else if (plane === 'sagittal') {
+                x = sliceVal; y = canvasX; z = canvasY;
+            } else {
+                x = canvasX; y = sliceVal; z = canvasY;
+            }
+
+            // If add point mode is active, add a data point
+            if (addPointMode) {
+                await addDataPoint(currentStudy, currentSeries, plane, x, y, z);
+                return;
+            }
+
+            // Otherwise, probe the voxel
+            const metadata = await loadVoxelMetadata(currentStudy, currentSeries, x, y, z);
+            if (metadata) {
+                singleProbe.innerHTML = formatMetadata(metadata);
+            }
+        });
+
+        // ========================================
+        // COMPARE VIEW
+        // ========================================
+
+        const syncButton = document.getElementById('sync-button');
+
+        syncButton.addEventListener('click', () => {
+            syncSlices = !syncSlices;
+            syncButton.classList.toggle('synced', syncSlices);
+            syncButton.textContent = syncSlices ? '🔒 Synced' : '🔗 Sync Slices';
+        });
+
+        async function setupComparePanel(panelId) {
+            const studySelect = document.getElementById(`compare-study-${panelId}`);
+            const seqSelect = document.getElementById(`compare-seq-${panelId}`);
+            const planeSelect = document.getElementById(`compare-plane-${panelId}`);
+            const canvas = document.getElementById(`compare-canvas-${panelId}`);
+            const slider = document.getElementById(`compare-slider-${panelId}`);
+            const sliderValue = document.getElementById(`compare-slider-value-${panelId}`);
+            const probeEl = document.getElementById(`compare-probe-${panelId}`);
+
+            studySelect.addEventListener('change', async (e) => {
+                compareState[panelId].study = e.target.value;
+                compareState[panelId].series = null;
+                await loadSequences(e.target.value, seqSelect);
+            });
+
+            seqSelect.addEventListener('change', async (e) => {
+                compareState[panelId].series = e.target.value;
+                const dims = await getVolumeInfo(compareState[panelId].study, e.target.value);
+                if (dims) {
+                    compareState[panelId].dims = dims;
+                    updateCompareSlider(panelId);
+                }
+            });
+
+            planeSelect.addEventListener('change', (e) => {
+                compareState[panelId].plane = e.target.value;
+                updateCompareSlider(panelId);
+            });
+
+            slider.addEventListener('input', async (e) => {
+                const value = parseInt(e.target.value);
+                const max = parseInt(e.target.max);
+                sliderValue.textContent = `${value}/${max}`;
+
+                await loadCompareSlice(panelId);
+
+                // Sync other panel if enabled
+                if (syncSlices) {
+                    const otherPanel = panelId === 'a' ? 'b' : 'a';
+                    const otherSlider = document.getElementById(`compare-slider-${otherPanel}`);
+                    const otherMax = parseInt(otherSlider.max);
+
+                    // Sync by percentage
+                    const pct = value / max;
+                    const otherValue = Math.round(pct * otherMax);
+                    otherSlider.value = otherValue;
+                    document.getElementById(`compare-slider-value-${otherPanel}`).textContent = `${otherValue}/${otherMax}`;
+                    await loadCompareSlice(otherPanel);
+                }
+            });
+
+            canvas.addEventListener('click', async (e) => {
+                const state = compareState[panelId];
+                if (!state.study || !state.series) return;
+
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+
+                const canvasX = Math.floor((e.clientX - rect.left) * scaleX);
+                const canvasY = Math.floor((e.clientY - rect.top) * scaleY);
+
+                const sliceVal = parseInt(slider.value);
+                let x, y, z;
+
+                if (state.plane === 'axial') {
+                    x = canvasX; y = canvasY; z = sliceVal;
+                } else if (state.plane === 'sagittal') {
+                    x = sliceVal; y = canvasX; z = canvasY;
+                } else {
+                    x = canvasX; y = sliceVal; z = canvasY;
+                }
+
+                // If add point mode is active, add a data point
+                if (addPointMode) {
+                    await addDataPoint(state.study, state.series, state.plane, x, y, z);
+                    return;
+                }
+
+                // Otherwise, probe the voxel
+                const metadata = await loadVoxelMetadata(state.study, state.series, x, y, z);
+                if (metadata) {
+                    probeEl.innerHTML = formatMetadataCompact(metadata);
+                }
+            });
+        }
+
+        function updateCompareSlider(panelId) {
+            const state = compareState[panelId];
+            if (!state.dims) return;
+
+            const slider = document.getElementById(`compare-slider-${panelId}`);
+            const sliderValue = document.getElementById(`compare-slider-value-${panelId}`);
+
+            let sliceMax;
+            if (state.plane === 'axial') sliceMax = state.dims.z;
+            else if (state.plane === 'sagittal') sliceMax = state.dims.x;
+            else sliceMax = state.dims.y;
+
+            slider.max = sliceMax - 1;
+            slider.value = Math.floor(sliceMax / 2);
+            slider.disabled = false;
+            sliderValue.textContent = `${slider.value}/${sliceMax - 1}`;
+
+            loadCompareSlice(panelId);
+        }
+
+        async function loadCompareSlice(panelId) {
+            const state = compareState[panelId];
+            if (!state.study || !state.series) return;
+
+            const canvas = document.getElementById(`compare-canvas-${panelId}`);
+            const slider = document.getElementById(`compare-slider-${panelId}`);
+
+            await loadOrthoslice(canvas, state.study, state.series, state.plane, parseInt(slider.value));
+        }
+
+        // Initialize compare panels
+        setupComparePanel('a');
+        setupComparePanel('b');
+
+        // ========================================
+        // REFRESH CURRENT VIEW
+        // ========================================
+
+        function refreshCurrentView() {
+            if (!currentStudy || !currentSeries) return;
+
+            if (currentViewMode === 'volume' || currentViewMode === 'triplanar') {
+                updateOrthoPanelsForMainVolume();
+            } else if (currentViewMode === 'single') {
+                updateSingleView();
+            }
+            // Compare view manages its own state
+        }
+
+        // ========================================
+        // EVENT LISTENERS
+        // ========================================
+
+        // Main study selector
+        document.getElementById('study').addEventListener('change', async (e) => {
+            currentStudy = e.target.value;
+            currentSeries = null;
+
+            // Save selection (clear sequence, will be set when user picks one)
+            saveLastSelection(e.target.value, null);
+
+            // Clear 3D visualization
             if (currentMesh) {
                 scene.remove(currentMesh);
                 currentMesh.geometry.dispose();
@@ -803,25 +2221,14 @@
             }
             volumeData = null;
             allVoxels = [];
+            volumeDims = { x: 0, y: 0, z: 0 };
 
-            // Reset all view panels
-            Object.keys(views).forEach(name => {
-                const view = views[name];
-                view.slider.disabled = true;
-                view.slider.value = 0;
-                view.slider.max = 0;
-                document.getElementById(`${name}-value`).textContent = '0 / 0';
-                document.getElementById(`${name}-dims`).textContent = '';
-                document.getElementById(`${name}-probe`).classList.remove('expanded');
-                view.ctx.clearRect(0, 0, view.canvas.width, view.canvas.height);
-            });
+            await loadSequences(e.target.value, document.getElementById('sequence'));
         });
 
+        // Main sequence selector
         document.getElementById('sequence').addEventListener('change', (e) => {
-            // Collapse all probes when changing sequence
-            Object.keys(views).forEach(name => {
-                document.getElementById(`${name}-probe`).classList.remove('expanded');
-            });
+            saveLastSelection(currentStudy, e.target.value);
             loadVolume(currentStudy, e.target.value);
         });
 
@@ -835,40 +2242,51 @@
             createVoxels(value);
         });
 
-        // Setup slider event listeners for each view
-        Object.keys(views).forEach(name => {
-            const view = views[name];
-            view.slider.addEventListener('input', (e) => {
-                const value = parseInt(e.target.value);
-                const max = parseInt(e.target.max);
-                document.getElementById(`${name}-value`).textContent = `${value} / ${max}`;
+        // ========================================
+        // WINDOW RESIZE
+        // ========================================
 
-                if (currentStudy && currentSeries) {
-                    loadOrthoslice(name, value);
-                    // Collapse probe when slider changes
-                    document.getElementById(`${name}-probe`).classList.remove('expanded');
-                }
-            });
-        });
+        function handleResize() {
+            if (currentViewMode !== 'volume') return;
 
-        window.addEventListener('resize', () => {
             const width = container.clientWidth;
             const height = container.clientHeight;
-            camera.aspect = width / height;
-            camera.updateProjectionMatrix();
-            renderer.setSize(width, height);
-        });
 
-        // Animation loop
+            if (width > 0 && height > 0) {
+                camera.aspect = width / height;
+                camera.updateProjectionMatrix();
+                renderer.setSize(width, height);
+            }
+        }
+
+        window.addEventListener('resize', handleResize);
+
+        // ========================================
+        // ANIMATION LOOP
+        // ========================================
+
         function animate() {
             requestAnimationFrame(animate);
             controls.update();
             renderer.render(scene, camera);
         }
 
-        // Initialize
+        // ========================================
+        // INITIALIZATION
+        // ========================================
+
+        // Set initial view
+        switchView(currentViewMode);
+
+        // Load studies
         loadStudies();
+
+        // Start animation
         animate();
+
+        // Initial resize
+        setTimeout(handleResize, 100);
     </script>
+    <script async defer src="https://buttons.github.io/buttons.js"></script>
 </body>
 </html>

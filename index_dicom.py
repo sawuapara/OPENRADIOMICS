@@ -15,7 +15,7 @@ import pydicom
 from tqdm import tqdm
 
 
-DATA_DIR = Path("/Users/samirawuapara/Documents/Personal/Health/jan 2026/Imaging/DICOM/3rd_CD")
+DATA_DIR = Path("/Users/samirawuapara/Documents/Personal/Health/brainLession/Test Results/Imaging/DICOM/3rd_CD")
 DB_PATH = Path(__file__).parent / "brain_inventory.db"
 
 
