@@ -1,0 +1,45 @@
+# Git
+.git
+.gitignore
+
+# DICOM data (loaded from S3 in production)
+RAW_DATA/
+*.dcm
+
+# Database files (use RDS in production)
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Terraform
+infrastructure/terraform/.terraform/
+infrastructure/terraform/*.tfstate*
+infrastructure/terraform/.terraform.lock.hcl
+
+# Documentation
+*.md
+!README.md
+
+# Test files
+tests/
+*.test.py
+
+# Misc
+.DS_Store
+*.log

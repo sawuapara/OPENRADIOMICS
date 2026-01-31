@@ -1,0 +1,19 @@
+# OpenRadiomics Python Dependencies
+
+# Web framework
+flask>=3.0.0
+gunicorn>=21.0.0
+
+# Medical imaging
+pydicom>=2.4.0
+numpy>=1.24.0
+scipy>=1.11.0
+
+# AWS SDK
+boto3>=1.34.0
+
+# Database (PostgreSQL)
+psycopg2-binary>=2.9.9
+
+# Utilities
+python-dotenv>=1.0.0

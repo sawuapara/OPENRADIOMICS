@@ -64,3 +64,36 @@ output "aws_region" {
   description = "AWS region"
   value       = data.aws_region.current.name
 }
+
+# S3 outputs
+output "s3_bucket_name" {
+  description = "S3 bucket name for DICOM files"
+  value       = aws_s3_bucket.dicom.bucket
+}
+
+output "s3_bucket_arn" {
+  description = "S3 bucket ARN"
+  value       = aws_s3_bucket.dicom.arn
+}
+
+# ECR outputs
+output "ecr_repository_url" {
+  description = "ECR repository URL for Docker images"
+  value       = aws_ecr_repository.app.repository_url
+}
+
+output "ecr_repository_name" {
+  description = "ECR repository name"
+  value       = aws_ecr_repository.app.name
+}
+
+# App Runner outputs
+output "app_url" {
+  description = "App Runner service URL"
+  value       = "https://${aws_apprunner_service.app.service_url}"
+}
+
+output "app_runner_service_arn" {
+  description = "App Runner service ARN"
+  value       = aws_apprunner_service.app.arn
+}

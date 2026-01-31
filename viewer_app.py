@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """
-3D Voxel MRI Viewer - Flask Backend
-Serves MRI volume data to Three.js frontend for 3D visualization.
+OpenRadiomics - 3D Voxel MRI Viewer
+Flask Backend serving MRI volume data to Three.js frontend.
+
+Supports both local filesystem and S3 storage for DICOM files.
 """
 
 from __future__ import annotations
 
+import io
 import json
+import os
 import sqlite3
+import tempfile
 from pathlib import Path
 from functools import lru_cache
 
@@ -17,11 +22,30 @@ from flask import Flask, jsonify, render_template
 
 app = Flask(__name__)
 
+# Configuration
 BASE_DIR = Path(__file__).parent
 DB_PATH = BASE_DIR / "brain_inventory.db"
 
+# S3 configuration (set via environment variables)
+S3_BUCKET_NAME = os.environ.get("S3_BUCKET_NAME")
+AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
+USE_S3 = bool(S3_BUCKET_NAME)
+
+# Initialize S3 client if configured
+s3_client = None
+if USE_S3:
+    import boto3
+    s3_client = boto3.client("s3", region_name=AWS_REGION)
+    print(f"S3 storage enabled: {S3_BUCKET_NAME}")
+else:
+    print(f"Local storage mode. Database: {DB_PATH}")
+
 # Volume cache for orthogonal slicing
 volume_cache = {}
+
+# Local cache directory for S3 files
+CACHE_DIR = Path(tempfile.gettempdir()) / "dicom_cache"
+CACHE_DIR.mkdir(exist_ok=True)
 
 
 def get_db_connection():
@@ -29,6 +53,40 @@ def get_db_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def load_dicom_file(file_path_or_s3_key: str) -> pydicom.Dataset:
+    """
+    Load a DICOM file from local filesystem or S3.
+    Uses local cache for S3 files to avoid repeated downloads.
+    """
+    if USE_S3:
+        # Check local cache first
+        cache_path = CACHE_DIR / file_path_or_s3_key.replace("/", "_")
+
+        if cache_path.exists():
+            return pydicom.dcmread(cache_path)
+
+        # Download from S3
+        try:
+            response = s3_client.get_object(Bucket=S3_BUCKET_NAME, Key=file_path_or_s3_key)
+            dicom_bytes = response["Body"].read()
+
+            # Cache locally
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_bytes(dicom_bytes)
+
+            return pydicom.dcmread(io.BytesIO(dicom_bytes))
+        except Exception as e:
+            raise RuntimeError(f"Failed to load from S3: {file_path_or_s3_key} - {e}")
+    else:
+        # Load from local filesystem
+        return pydicom.dcmread(file_path_or_s3_key)
+
+
+def get_file_path_column():
+    """Return the column name for file paths (file_path for local, s3_key for cloud)."""
+    return "s3_key" if USE_S3 else "file_path"
 
 
 def load_volume_cached(study_id: str, series_name: str):
@@ -41,8 +99,10 @@ def load_volume_cached(study_id: str, series_name: str):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT file_path, InstanceNumber, ImagePositionPatient, PixelSpacing, SliceThickness
+    file_col = get_file_path_column()
+
+    cursor.execute(f"""
+        SELECT {file_col} as file_path, InstanceNumber, ImagePositionPatient, PixelSpacing, SliceThickness
         FROM dicom_files
         WHERE StudyInstanceUID = ? AND SeriesDescription = ?
         ORDER BY InstanceNumber
@@ -72,7 +132,7 @@ def load_volume_cached(study_id: str, series_name: str):
     raw_slices = []
     for row in rows:
         try:
-            dcm = pydicom.dcmread(row["file_path"])
+            dcm = load_dicom_file(row["file_path"])
             pixel_array = dcm.pixel_array.astype(np.float32)
             raw_slices.append(pixel_array.copy())
             slices.append(pixel_array)
@@ -178,9 +238,11 @@ def get_volume(study_id, series_name):
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    file_col = get_file_path_column()
+
     # Get all files for this series within the study, ordered by instance number
-    cursor.execute("""
-        SELECT file_path, InstanceNumber, ImagePositionPatient, PixelSpacing, SliceThickness
+    cursor.execute(f"""
+        SELECT {file_col} as file_path, InstanceNumber, ImagePositionPatient, PixelSpacing, SliceThickness
         FROM dicom_files
         WHERE StudyInstanceUID = ? AND SeriesDescription = ?
         ORDER BY InstanceNumber
@@ -209,7 +271,7 @@ def get_volume(study_id, series_name):
     slices = []
     for row in rows:
         try:
-            dcm = pydicom.dcmread(row["file_path"])
+            dcm = load_dicom_file(row["file_path"])
             pixel_array = dcm.pixel_array.astype(np.float32)
             slices.append(pixel_array)
         except Exception as e:
@@ -274,9 +336,11 @@ def get_slice(study_id, series_name, slice_num):
     conn = get_db_connection()
     cursor = conn.cursor()
 
+    file_col = get_file_path_column()
+
     # Get all files for this series within the study, ordered by instance number
-    cursor.execute("""
-        SELECT file_path, InstanceNumber
+    cursor.execute(f"""
+        SELECT {file_col} as file_path, InstanceNumber
         FROM dicom_files
         WHERE StudyInstanceUID = ? AND SeriesDescription = ?
         ORDER BY InstanceNumber
@@ -295,7 +359,7 @@ def get_slice(study_id, series_name, slice_num):
 
     # Load the specific slice
     try:
-        dcm = pydicom.dcmread(rows[slice_num]["file_path"])
+        dcm = load_dicom_file(rows[slice_num]["file_path"])
         pixel_array = dcm.pixel_array.astype(np.float32)
     except Exception as e:
         return jsonify({"error": f"Could not load slice: {e}"}), 500
@@ -528,7 +592,14 @@ def get_volume_info(study_id, series_name):
     })
 
 
+@app.route("/api/health")
+def health_check():
+    """Health check endpoint for load balancers."""
+    return jsonify({"status": "healthy", "storage": "s3" if USE_S3 else "local"})
+
+
 if __name__ == "__main__":
+    print(f"Storage mode: {'S3 (' + S3_BUCKET_NAME + ')' if USE_S3 else 'Local'}")
     print(f"Database: {DB_PATH}")
     print("Starting server at http://127.0.0.1:5000")
     app.run(debug=True, host="127.0.0.1", port=5000)
