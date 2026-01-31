@@ -56,6 +56,69 @@
         .header-group select:focus {
             outline: 2px solid #4fc3f7;
         }
+
+        /* Mac-style Menu Dropdown */
+        .header-menu {
+            position: relative;
+        }
+        .header-menu-trigger {
+            padding: 6px 12px;
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-size: 13px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .header-menu-trigger:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .header-menu.open .header-menu-trigger {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        .header-menu-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            margin-top: 4px;
+            background: #2d2d44;
+            border: 1px solid #444;
+            border-radius: 6px;
+            min-width: 160px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            z-index: 1000;
+            overflow: hidden;
+        }
+        .header-menu.open .header-menu-dropdown {
+            display: block;
+        }
+        .header-menu-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            color: #fff;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+        .header-menu-item:hover {
+            background: #4fc3f7;
+            color: #000;
+        }
+        .header-menu-item .check {
+            width: 20px;
+            margin-right: 4px;
+            color: #4fc3f7;
+        }
+        .header-menu-item:hover .check {
+            color: #000;
+        }
+        .header-menu-item .check:empty::before {
+            content: '';
+            display: inline-block;
+            width: 20px;
+        }
         #loading-indicator {
             color: #4fc3f7;
             font-size: 12px;
@@ -208,17 +271,18 @@
             align-items: center;
         }
         #single-view .single-canvas-container {
-            flex: 1;
+            flex: 0 1 auto;
             display: flex;
             justify-content: center;
             align-items: center;
             background: #000;
             border-radius: 8px;
             overflow: hidden;
+            max-height: 65vh;
         }
         #single-view .single-canvas {
             max-width: 100%;
-            max-height: 100%;
+            max-height: 65vh;
             cursor: crosshair;
         }
         #single-view .single-slider-row {
@@ -243,29 +307,6 @@
         /* --- COMPARE VIEW --- */
         #compare-view {
             flex-direction: column;
-        }
-        #compare-view .sync-bar {
-            padding: 10px 20px;
-            background: #0d0d1a;
-            border-bottom: 1px solid #333;
-            text-align: center;
-        }
-        #compare-view .sync-button {
-            padding: 8px 20px;
-            background: #2d2d44;
-            border: none;
-            border-radius: 5px;
-            color: #fff;
-            cursor: pointer;
-            font-size: 13px;
-            transition: background 0.2s;
-        }
-        #compare-view .sync-button.synced {
-            background: #4fc3f7;
-            color: #000;
-        }
-        #compare-view .sync-button:hover {
-            opacity: 0.9;
         }
         #compare-view .compare-panels {
             flex: 1;
@@ -301,6 +342,23 @@
             padding: 6px;
             font-size: 12px;
         }
+        .panel-sync-toggle {
+            background: transparent;
+            border: 1px solid #444;
+            border-radius: 4px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 14px;
+            opacity: 0.6;
+            margin-left: 8px;
+        }
+        .panel-sync-toggle.synced {
+            background: #4fc3f7;
+            opacity: 1;
+        }
+        .panel-sync-toggle:hover {
+            opacity: 0.9;
+        }
         #compare-view .compare-canvas-container {
             flex: 1;
             display: flex;
@@ -309,6 +367,7 @@
             background: #000;
             border-radius: 8px;
             overflow: hidden;
+            min-height: 0;
         }
         #compare-view .compare-canvas {
             max-width: 100%;
@@ -623,14 +682,34 @@
     <div id="header">
         <h1>OPENRADIOMICS</h1>
 
-        <div class="header-group">
-            <label for="view-mode">View:</label>
-            <select id="view-mode">
-                <option value="volume">3D Volume</option>
-                <option value="triplanar">Tri-Planar</option>
-                <option value="single">Single</option>
-                <option value="compare">Compare</option>
-            </select>
+        <div class="header-menu" id="view-menu">
+            <button class="header-menu-trigger">View</button>
+            <div class="header-menu-dropdown">
+                <div class="header-menu-item" data-view="volume">
+                    <span class="check"></span>3D Volume
+                </div>
+                <div class="header-menu-item" data-view="triplanar">
+                    <span class="check"></span>Tri-Planar
+                </div>
+                <div class="header-menu-item" data-view="single">
+                    <span class="check"></span>Single
+                </div>
+                <div class="header-menu-item" data-view="compare">
+                    <span class="check"></span>Compare
+                </div>
+            </div>
+        </div>
+
+        <div class="header-menu" id="sync-menu">
+            <button class="header-menu-trigger">Sync</button>
+            <div class="header-menu-dropdown">
+                <div class="header-menu-item" data-sync="all">
+                    <span class="check"></span>Sync All Views
+                </div>
+                <div class="header-menu-item" data-sync="linked">
+                    <span class="check"></span>Sync Linked Only
+                </div>
+            </div>
         </div>
 
         <div class="header-group" id="main-study-selector">
@@ -813,9 +892,6 @@
 
         <!-- COMPARE VIEW -->
         <div id="compare-view" class="view-container">
-            <div class="sync-bar">
-                <button id="sync-button" class="sync-button">🔗 Sync Slices</button>
-            </div>
             <div class="compare-panels">
                 <!-- Panel A -->
                 <div class="compare-panel" id="compare-panel-a">
@@ -836,6 +912,7 @@
                                 <option value="coronal">Coronal</option>
                             </select>
                         </div>
+                        <button id="compare-sync-a" class="panel-sync-toggle" title="Link: Changes sync with other linked panels">🔗</button>
                     </div>
                     <div class="compare-canvas-container">
                         <canvas id="compare-canvas-a" class="compare-canvas" width="512" height="512"></canvas>
@@ -868,6 +945,7 @@
                                 <option value="coronal">Coronal</option>
                             </select>
                         </div>
+                        <button id="compare-sync-b" class="panel-sync-toggle" title="Link: Changes sync with other linked panels">🔗</button>
                     </div>
                     <div class="compare-canvas-container">
                         <canvas id="compare-canvas-b" class="compare-canvas" width="512" height="512"></canvas>
@@ -931,8 +1009,99 @@
         console.log('OpenRadiomics Viewer - Three.js:', THREE.REVISION);
 
         // ========================================
+        // SETTINGS STORAGE (must be defined first)
+        // ========================================
+
+        // Unified storage key and default settings
+        const STORAGE_KEY = 'openradiomics';
+
+        const DEFAULT_SETTINGS = {
+            defaultView: 'volume',
+            lastStudy: null,
+            lastSequence: null,
+            views: {
+                compare: {
+                    leftPanel: { plane: 'axial' },
+                    rightPanel: { plane: 'axial' }
+                },
+                single: { plane: 'axial' }
+            }
+        };
+
+        function deepMerge(target, source) {
+            const result = { ...target };
+            for (const key of Object.keys(source)) {
+                if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+                    result[key] = deepMerge(target[key] || {}, source[key]);
+                } else if (source[key] !== undefined) {
+                    result[key] = source[key];
+                }
+            }
+            return result;
+        }
+
+        function getSettings() {
+            try {
+                const stored = localStorage.getItem(STORAGE_KEY);
+                if (stored) {
+                    const parsed = JSON.parse(stored);
+                    return deepMerge(DEFAULT_SETTINGS, parsed);
+                }
+            } catch (e) {
+                console.warn('Failed to parse settings:', e);
+            }
+            return { ...DEFAULT_SETTINGS };
+        }
+
+        function saveSettings(updates) {
+            const current = getSettings();
+            const merged = deepMerge(current, updates);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        }
+
+        // ========================================
         // URL STATE MANAGEMENT
         // ========================================
+
+        function getURLParams() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                view: params.get('view'),
+                study: params.get('study'),
+                sequence: params.get('sequence'),
+                plane: params.get('plane'),
+                leftPlane: params.get('leftPlane'),
+                rightPlane: params.get('rightPlane')
+            };
+        }
+
+        function augmentURLFromCache() {
+            const settings = getSettings();
+            const url = new URL(window.location);
+            const params = url.searchParams;
+            let changed = false;
+
+            // Map cache keys to URL params
+            const mappings = [
+                { param: 'view', value: settings.defaultView },
+                { param: 'study', value: settings.lastStudy },
+                { param: 'sequence', value: settings.lastSequence },
+                { param: 'plane', value: settings.views?.single?.plane },
+                { param: 'leftPlane', value: settings.views?.compare?.leftPanel?.plane },
+                { param: 'rightPlane', value: settings.views?.compare?.rightPanel?.plane }
+            ];
+
+            for (const { param, value } of mappings) {
+                if (!params.has(param) && value) {
+                    params.set(param, value);
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                history.replaceState({}, '', url);
+            }
+        }
 
         function getViewFromURL() {
             const params = new URLSearchParams(window.location.search);
@@ -940,12 +1109,32 @@
             if (['single', 'compare', 'triplanar', 'volume'].includes(view)) {
                 return view;
             }
-            return 'volume'; // default
+            // Fall back to cached default view
+            const settings = getSettings();
+            return settings.defaultView || 'volume';
         }
 
         function setViewInURL(view) {
             const url = new URL(window.location);
             url.searchParams.set('view', view);
+            history.pushState({}, '', url);
+        }
+
+        function setPlaneInURL(param, value) {
+            const url = new URL(window.location);
+            url.searchParams.set(param, value);
+            history.pushState({}, '', url);
+        }
+
+        function setStudyInURL(value) {
+            const url = new URL(window.location);
+            url.searchParams.set('study', value);
+            history.pushState({}, '', url);
+        }
+
+        function setSequenceInURL(value) {
+            const url = new URL(window.location);
+            url.searchParams.set('sequence', value);
             history.pushState({}, '', url);
         }
 
@@ -958,6 +1147,7 @@
         function switchView(viewMode) {
             currentViewMode = viewMode;
             setViewInURL(viewMode);
+            saveSettings({ defaultView: viewMode });
 
             // Hide all view containers
             document.querySelectorAll('.view-container').forEach(el => {
@@ -994,18 +1184,80 @@
             }
         }
 
-        // Initialize view mode dropdown
-        const viewModeSelect = document.getElementById('view-mode');
-        viewModeSelect.value = currentViewMode;
-        viewModeSelect.addEventListener('change', (e) => {
-            switchView(e.target.value);
+        // Initialize View menu
+        const viewMenu = document.getElementById('view-menu');
+        const viewMenuTrigger = viewMenu.querySelector('.header-menu-trigger');
+        const viewMenuItems = viewMenu.querySelectorAll('.header-menu-item');
+
+        function updateViewMenuCheck() {
+            viewMenuItems.forEach(item => {
+                const check = item.querySelector('.check');
+                if (item.dataset.view === currentViewMode) {
+                    check.textContent = '✓';
+                } else {
+                    check.textContent = '';
+                }
+            });
+        }
+
+        updateViewMenuCheck();
+
+        viewMenuTrigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Close other menus
+            document.querySelectorAll('.header-menu.open').forEach(m => {
+                if (m !== viewMenu) m.classList.remove('open');
+            });
+            viewMenu.classList.toggle('open');
+        });
+
+        viewMenuItems.forEach(item => {
+            item.addEventListener('click', () => {
+                const view = item.dataset.view;
+                switchView(view);
+                updateViewMenuCheck();
+                viewMenu.classList.remove('open');
+            });
+        });
+
+        // Initialize Sync menu
+        const syncMenu = document.getElementById('sync-menu');
+        const syncMenuTrigger = syncMenu.querySelector('.header-menu-trigger');
+        const syncMenuItems = syncMenu.querySelectorAll('.header-menu-item');
+
+        syncMenuTrigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Close other menus
+            document.querySelectorAll('.header-menu.open').forEach(m => {
+                if (m !== syncMenu) m.classList.remove('open');
+            });
+            syncMenu.classList.toggle('open');
+        });
+
+        syncMenuItems.forEach(item => {
+            item.addEventListener('click', () => {
+                const action = item.dataset.sync;
+                if (action === 'all') {
+                    syncCurrentView(false);
+                } else if (action === 'linked') {
+                    syncCurrentView(true);
+                }
+                syncMenu.classList.remove('open');
+            });
+        });
+
+        // Close menus when clicking outside
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.header-menu.open').forEach(m => {
+                m.classList.remove('open');
+            });
         });
 
         // Handle browser back/forward
         window.addEventListener('popstate', () => {
             const view = getViewFromURL();
-            viewModeSelect.value = view;
             switchView(view);
+            updateViewMenuCheck();
         });
 
         // ========================================
@@ -1060,10 +1312,10 @@
 
         // Compare view state
         let compareState = {
-            a: { study: null, series: null, plane: 'axial', dims: null },
-            b: { study: null, series: null, plane: 'axial', dims: null }
+            a: { study: null, series: null, plane: 'axial', volumeInfo: null },
+            b: { study: null, series: null, plane: 'axial', volumeInfo: null }
         };
-        let syncSlices = false;
+        let compareSyncState = { a: false, b: false };
 
         // ========================================
         // DATA POINTS STATE & FUNCTIONS
@@ -1443,21 +1695,20 @@
         // UTILITY FUNCTIONS
         // ========================================
 
-        // Storage keys for remembering last selection
-        const STORAGE_KEY_LAST_STUDY = 'openradiomics_lastStudy';
-        const STORAGE_KEY_LAST_SEQUENCE = 'openradiomics_lastSequence';
-
         // Save last used selection
         function saveLastSelection(studyId, seriesName) {
-            if (studyId) localStorage.setItem(STORAGE_KEY_LAST_STUDY, studyId);
-            if (seriesName) localStorage.setItem(STORAGE_KEY_LAST_SEQUENCE, seriesName);
+            const updates = {};
+            if (studyId) updates.lastStudy = studyId;
+            if (seriesName) updates.lastSequence = seriesName;
+            saveSettings(updates);
         }
 
         // Get last used selection
         function getLastSelection() {
+            const settings = getSettings();
             return {
-                study: localStorage.getItem(STORAGE_KEY_LAST_STUDY),
-                sequence: localStorage.getItem(STORAGE_KEY_LAST_SEQUENCE)
+                study: settings.lastStudy,
+                sequence: settings.lastSequence
             };
         }
 
@@ -1584,6 +1835,8 @@
                     return null;
                 }
 
+                // Backend already handles aspect ratio correction for sagittal/coronal
+                // Just render the returned dimensions directly
                 canvas.width = data.width;
                 canvas.height = data.height;
 
@@ -1702,8 +1955,8 @@
                     mainSelect.appendChild(option);
                 });
 
-                // Populate compare dropdowns
-                populateCompareStudyDropdowns();
+                // Populate compare dropdowns (with auto-selection of last used study/sequence)
+                await populateCompareStudyDropdowns();
 
                 setStatus(`${studiesCache.length} studies available`);
 
@@ -1743,8 +1996,12 @@
             }
         }
 
-        function populateCompareStudyDropdowns() {
-            ['a', 'b'].forEach(panel => {
+        async function populateCompareStudyDropdowns() {
+            const last = getLastSelection();
+            const settings = getSettings();
+            const urlParams = getURLParams();
+
+            for (const panel of ['a', 'b']) {
                 const select = document.getElementById(`compare-study-${panel}`);
                 select.innerHTML = '<option value="">-- Select --</option>';
                 studiesCache.forEach(study => {
@@ -1753,7 +2010,38 @@
                     option.textContent = `${study.date} - ${study.description}`;
                     select.appendChild(option);
                 });
-            });
+
+                // Restore plane for this panel (URL > cache > default)
+                const panelKey = panel === 'a' ? 'leftPanel' : 'rightPanel';
+                const urlPlaneParam = panel === 'a' ? 'leftPlane' : 'rightPlane';
+                const planeValue = urlParams[urlPlaneParam] || settings.views?.compare?.[panelKey]?.plane || 'axial';
+                const planeSelect = document.getElementById(`compare-plane-${panel}`);
+                planeSelect.value = planeValue;
+                compareState[panel].plane = planeValue;
+
+                // Auto-select last used study for both panels
+                if (last.study && studiesCache.some(s => s.id === last.study)) {
+                    select.value = last.study;
+                    compareState[panel].study = last.study;
+
+                    // Load sequences for the selected study
+                    const seqSelect = document.getElementById(`compare-seq-${panel}`);
+                    const sequences = await loadSequences(last.study, seqSelect);
+
+                    // Auto-select last used sequence if available
+                    if (last.sequence && sequences.some(s => s.name === last.sequence)) {
+                        seqSelect.value = last.sequence;
+                        compareState[panel].series = last.sequence;
+
+                        // Load volume info and display the slice
+                        const volumeInfo = await getVolumeInfo(last.study, last.sequence);
+                        if (volumeInfo) {
+                            compareState[panel].volumeInfo = volumeInfo;
+                            updateCompareSlider(panel);
+                        }
+                    }
+                }
+            }
         }
 
         // ========================================
@@ -1796,7 +2084,12 @@
                 const response = await fetch(`/api/volume-info/${encodeURIComponent(studyId)}/${encodeURIComponent(seriesName)}`);
                 const info = await response.json();
                 if (info.error) return null;
-                return info.dimensions;
+                // Return full info including spacing for aspect ratio correction
+                return {
+                    dims: info.dimensions,
+                    pixelSpacing: info.pixelSpacing || [1, 1],
+                    sliceThickness: info.sliceThickness || 1
+                };
             } catch (error) {
                 console.error('Error getting volume info:', error);
                 return null;
@@ -1815,14 +2108,14 @@
             showLoading(true);
 
             try {
-                // Get volume dimensions
-                const dims = await getVolumeInfo(studyId, seriesName);
-                if (!dims) {
+                // Get volume info (dimensions and spacing)
+                const volumeInfo = await getVolumeInfo(studyId, seriesName);
+                if (!volumeInfo) {
                     setStatus('Error loading volume info');
                     return;
                 }
 
-                volumeDims = dims;
+                volumeDims = volumeInfo.dims;
 
                 // Update all ortho panels that use main study/series
                 updateOrthoPanelsForMainVolume();
@@ -1999,7 +2292,11 @@
             }
         }
 
-        singlePlane.addEventListener('change', updateSingleView);
+        singlePlane.addEventListener('change', () => {
+            saveSettings({ views: { single: { plane: singlePlane.value } } });
+            setPlaneInURL('plane', singlePlane.value);
+            updateSingleView();
+        });
 
         singleSlider.addEventListener('input', async (e) => {
             const value = parseInt(e.target.value);
@@ -2050,13 +2347,16 @@
         // COMPARE VIEW
         // ========================================
 
-        const syncButton = document.getElementById('sync-button');
-
-        syncButton.addEventListener('click', () => {
-            syncSlices = !syncSlices;
-            syncButton.classList.toggle('synced', syncSlices);
-            syncButton.textContent = syncSlices ? '🔒 Synced' : '🔗 Sync Slices';
-        });
+        // Setup sync toggle buttons
+        function setupSyncToggle(panelId) {
+            const toggle = document.getElementById(`compare-sync-${panelId}`);
+            toggle.addEventListener('click', () => {
+                compareSyncState[panelId] = !compareSyncState[panelId];
+                toggle.classList.toggle('synced', compareSyncState[panelId]);
+            });
+        }
+        setupSyncToggle('a');
+        setupSyncToggle('b');
 
         async function setupComparePanel(panelId) {
             const studySelect = document.getElementById(`compare-study-${panelId}`);
@@ -2070,20 +2370,65 @@
             studySelect.addEventListener('change', async (e) => {
                 compareState[panelId].study = e.target.value;
                 compareState[panelId].series = null;
+
+                // Update global state
+                saveSettings({ lastStudy: e.target.value });
+                setStudyInURL(e.target.value);
+
                 await loadSequences(e.target.value, seqSelect);
+
+                // Auto-sync to other linked panels
+                if (compareSyncState[panelId]) {
+                    const otherPanel = panelId === 'a' ? 'b' : 'a';
+                    if (compareSyncState[otherPanel]) {
+                        const otherStudySelect = document.getElementById(`compare-study-${otherPanel}`);
+                        if (otherStudySelect.querySelector(`option[value="${e.target.value}"]`)) {
+                            otherStudySelect.value = e.target.value;
+                            compareState[otherPanel].study = e.target.value;
+                            compareState[otherPanel].series = null;
+                            await loadSequences(e.target.value, document.getElementById(`compare-seq-${otherPanel}`));
+                        }
+                    }
+                }
             });
 
             seqSelect.addEventListener('change', async (e) => {
                 compareState[panelId].series = e.target.value;
-                const dims = await getVolumeInfo(compareState[panelId].study, e.target.value);
-                if (dims) {
-                    compareState[panelId].dims = dims;
+
+                // Update global state
+                saveSettings({ lastSequence: e.target.value });
+                setSequenceInURL(e.target.value);
+
+                const volumeInfo = await getVolumeInfo(compareState[panelId].study, e.target.value);
+                if (volumeInfo) {
+                    compareState[panelId].volumeInfo = volumeInfo;
                     updateCompareSlider(panelId);
+                }
+
+                // Auto-sync to other linked panels
+                if (compareSyncState[panelId]) {
+                    const otherPanel = panelId === 'a' ? 'b' : 'a';
+                    if (compareSyncState[otherPanel]) {
+                        const otherSeqSelect = document.getElementById(`compare-seq-${otherPanel}`);
+                        if (otherSeqSelect.querySelector(`option[value="${e.target.value}"]`)) {
+                            otherSeqSelect.value = e.target.value;
+                            compareState[otherPanel].series = e.target.value;
+                            const otherVolumeInfo = await getVolumeInfo(compareState[otherPanel].study, e.target.value);
+                            if (otherVolumeInfo) {
+                                compareState[otherPanel].volumeInfo = otherVolumeInfo;
+                                updateCompareSlider(otherPanel);
+                            }
+                        }
+                    }
                 }
             });
 
             planeSelect.addEventListener('change', (e) => {
                 compareState[panelId].plane = e.target.value;
+                const panelKey = panelId === 'a' ? 'leftPanel' : 'rightPanel';
+                const urlParam = panelId === 'a' ? 'leftPlane' : 'rightPlane';
+                saveSettings({ views: { compare: { [panelKey]: { plane: e.target.value } } } });
+                setPlaneInURL(urlParam, e.target.value);
                 updateCompareSlider(panelId);
             });
 
@@ -2094,18 +2439,20 @@
 
                 await loadCompareSlice(panelId);
 
-                // Sync other panel if enabled
-                if (syncSlices) {
+                // Sync other panel if both are linked
+                if (compareSyncState[panelId]) {
                     const otherPanel = panelId === 'a' ? 'b' : 'a';
-                    const otherSlider = document.getElementById(`compare-slider-${otherPanel}`);
-                    const otherMax = parseInt(otherSlider.max);
+                    if (compareSyncState[otherPanel]) {
+                        const otherSlider = document.getElementById(`compare-slider-${otherPanel}`);
+                        const otherMax = parseInt(otherSlider.max);
 
-                    // Sync by percentage
-                    const pct = value / max;
-                    const otherValue = Math.round(pct * otherMax);
-                    otherSlider.value = otherValue;
-                    document.getElementById(`compare-slider-value-${otherPanel}`).textContent = `${otherValue}/${otherMax}`;
-                    await loadCompareSlice(otherPanel);
+                        // Sync by percentage
+                        const pct = value / max;
+                        const otherValue = Math.round(pct * otherMax);
+                        otherSlider.value = otherValue;
+                        document.getElementById(`compare-slider-value-${otherPanel}`).textContent = `${otherValue}/${otherMax}`;
+                        await loadCompareSlice(otherPanel);
+                    }
                 }
             });
 
@@ -2147,15 +2494,16 @@
 
         function updateCompareSlider(panelId) {
             const state = compareState[panelId];
-            if (!state.dims) return;
+            if (!state.volumeInfo) return;
 
+            const dims = state.volumeInfo.dims;
             const slider = document.getElementById(`compare-slider-${panelId}`);
             const sliderValue = document.getElementById(`compare-slider-value-${panelId}`);
 
             let sliceMax;
-            if (state.plane === 'axial') sliceMax = state.dims.z;
-            else if (state.plane === 'sagittal') sliceMax = state.dims.x;
-            else sliceMax = state.dims.y;
+            if (state.plane === 'axial') sliceMax = dims.z;
+            else if (state.plane === 'sagittal') sliceMax = dims.x;
+            else sliceMax = dims.y;
 
             slider.max = sliceMax - 1;
             slider.value = Math.floor(sliceMax / 2);
@@ -2192,6 +2540,80 @@
                 updateSingleView();
             }
             // Compare view manages its own state
+        }
+
+        // ========================================
+        // VIEW SYNC FUNCTIONS
+        // ========================================
+
+        async function syncCompareViews(linkedOnly) {
+            const urlParams = getURLParams();
+            const study = urlParams.study;
+            const sequence = urlParams.sequence;
+
+            for (const panel of ['a', 'b']) {
+                if (linkedOnly && !compareSyncState[panel]) continue;
+
+                const studySelect = document.getElementById(`compare-study-${panel}`);
+                const seqSelect = document.getElementById(`compare-seq-${panel}`);
+
+                if (study && studySelect.querySelector(`option[value="${study}"]`)) {
+                    studySelect.value = study;
+                    compareState[panel].study = study;
+
+                    await loadSequences(study, seqSelect);
+
+                    if (sequence && seqSelect.querySelector(`option[value="${sequence}"]`)) {
+                        seqSelect.value = sequence;
+                        compareState[panel].series = sequence;
+
+                        const volumeInfo = await getVolumeInfo(study, sequence);
+                        if (volumeInfo) {
+                            compareState[panel].volumeInfo = volumeInfo;
+                            updateCompareSlider(panel);
+                        }
+                    }
+                }
+            }
+        }
+
+        function syncSingleView() {
+            // Single view uses main header selectors, which already reflect global state
+            // Just trigger a refresh if needed
+            if (currentStudy && currentSeries) {
+                updateSingleView();
+            }
+        }
+
+        function syncTriplanarView() {
+            // Triplanar uses main header selectors
+            if (currentStudy && currentSeries) {
+                updateOrthoPanelsForMainVolume();
+            }
+        }
+
+        function syncVolumeView() {
+            // Volume uses main header selectors
+            if (currentStudy && currentSeries) {
+                loadVolume(currentStudy, currentSeries);
+            }
+        }
+
+        function syncCurrentView(linkedOnly) {
+            switch (currentViewMode) {
+                case 'compare':
+                    syncCompareViews(linkedOnly);
+                    break;
+                case 'single':
+                    syncSingleView();
+                    break;
+                case 'triplanar':
+                    syncTriplanarView();
+                    break;
+                case 'volume':
+                    syncVolumeView();
+                    break;
+            }
         }
 
         // ========================================
@@ -2275,8 +2697,16 @@
         // INITIALIZATION
         // ========================================
 
+        // Augment URL with cached values for missing params
+        augmentURLFromCache();
+
         // Set initial view
         switchView(currentViewMode);
+
+        // Restore single view plane (URL > cache > default)
+        const initSettings = getSettings();
+        const initUrlParams = getURLParams();
+        singlePlane.value = initUrlParams.plane || initSettings.views?.single?.plane || 'axial';
 
         // Load studies
         loadStudies();

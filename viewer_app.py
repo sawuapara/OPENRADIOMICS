@@ -353,11 +353,12 @@ def get_orthoslice(study_id, series_name, plane, index):
         index = max(0, min(index, nx - 1))
         slice_2d = volume[:, :, index]  # shape: (nz, ny)
         # Scale Z dimension to correct aspect ratio
-        scaled_nz = int(nz * z_scale)
-        # Use scipy or numpy to resize
         from scipy.ndimage import zoom
         slice_scaled = zoom(slice_2d, (z_scale, 1.0), order=1)
-        width, height = ny, scaled_nz
+        # Flip vertically so superior (top of head) is at top of image
+        slice_scaled = np.flipud(slice_scaled)
+        # Use actual zoomed dimensions (zoom may round differently)
+        height, width = slice_scaled.shape  # (scaled_nz, ny)
         total = nx
         normalized = (slice_scaled * 255).astype(np.uint8)
     elif plane == "coronal":
@@ -365,10 +366,12 @@ def get_orthoslice(study_id, series_name, plane, index):
         index = max(0, min(index, ny - 1))
         slice_2d = volume[:, index, :]  # shape: (nz, nx)
         # Scale Z dimension to correct aspect ratio
-        scaled_nz = int(nz * z_scale)
         from scipy.ndimage import zoom
         slice_scaled = zoom(slice_2d, (z_scale, 1.0), order=1)
-        width, height = nx, scaled_nz
+        # Flip vertically so superior (top of head) is at top of image
+        slice_scaled = np.flipud(slice_scaled)
+        # Use actual zoomed dimensions
+        height, width = slice_scaled.shape  # (scaled_nz, nx)
         total = ny
         normalized = (slice_scaled * 255).astype(np.uint8)
     else:
