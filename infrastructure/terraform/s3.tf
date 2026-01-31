@@ -70,6 +70,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "dicom" {
     id     = "archive-old-versions"
     status = "Enabled"
 
+    filter {} # Apply to all objects
+
     noncurrent_version_transition {
       noncurrent_days = 7
       storage_class   = "STANDARD_IA"
