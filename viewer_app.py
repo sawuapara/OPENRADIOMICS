@@ -72,7 +72,8 @@ CACHE_DIR = Path(tempfile.gettempdir()) / "dicom_cache"
 CACHE_DIR.mkdir(exist_ok=True)
 
 # Auth configuration
-AUTH_ENABLED = bool(os.environ.get("COGNITO_USER_POOL_ID"))
+# Always enable auth - redirects to login page even if Cognito isn't configured yet
+AUTH_ENABLED = True
 
 
 def get_callback_url():
