@@ -144,9 +144,27 @@ CREATE INDEX idx_instances_s3 ON instances(s3_key);
 CREATE TABLE users (
     id              SERIAL PRIMARY KEY,
     cognito_sub     VARCHAR(255) UNIQUE NOT NULL,   -- Cognito user ID (sub claim)
-    email           VARCHAR(255) UNIQUE NOT NULL,
+    email           VARCHAR(255) UNIQUE,            -- Email (may be NULL if phone-only registration)
     display_name    VARCHAR(255),
     role            VARCHAR(50) DEFAULT 'viewer',   -- 'admin', 'clinician', 'researcher', 'viewer'
+
+    -- Profile fields (HIPAA compliance)
+    first_name      VARCHAR(100),
+    last_name       VARCHAR(100),
+    phone           VARCHAR(20),                    -- Phone number in E.164 format
+
+    -- Address fields (HIPAA compliance)
+    street_address  VARCHAR(255),
+    city            VARCHAR(100),
+    state           VARCHAR(100),
+    postal_code     VARCHAR(20),
+    country         VARCHAR(100),
+
+    -- Consent tracking (HIPAA compliance)
+    terms_accepted_at       TIMESTAMPTZ,            -- When user accepted Terms of Service
+    hipaa_acknowledged_at   TIMESTAMPTZ,            -- When user acknowledged HIPAA requirements
+
+    -- User preferences and metadata
     preferences     JSONB DEFAULT '{}',             -- User preferences (theme, defaults, etc.)
     last_login      TIMESTAMPTZ,
     created_at      TIMESTAMPTZ DEFAULT NOW(),
@@ -156,6 +174,7 @@ CREATE TABLE users (
 CREATE INDEX idx_users_cognito ON users(cognito_sub);
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_phone ON users(phone);
 
 -- ============================================================================
 -- ACCESS CONTROL TABLES
@@ -402,3 +421,4 @@ CREATE TABLE schema_version (
 
 INSERT INTO schema_version (version, description) VALUES (1, 'Initial schema - OpenRadiomics normalized DICOM database');
 INSERT INTO schema_version (version, description) VALUES (2, 'Add audit_log table for HIPAA compliance');
+INSERT INTO schema_version (version, description) VALUES (3, 'Add user profile fields for custom registration (name, phone, address, consent tracking)');

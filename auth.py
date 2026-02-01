@@ -7,18 +7,22 @@ Provides:
 - @requires_auth decorator for protected routes
 - @requires_role decorator for RBAC
 - Audit logging for all access
+- User registration with Cognito
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from datetime import datetime
 from functools import wraps
-from typing import Optional
+from typing import Optional, Tuple, List
 
+import boto3
 import requests
+from botocore.exceptions import ClientError
 from flask import g, redirect, request, url_for, jsonify
 from jose import jwt, JWTError
 
@@ -27,6 +31,19 @@ COGNITO_REGION = os.environ.get("AWS_REGION", "us-east-1")
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
 COGNITO_DOMAIN = os.environ.get("COGNITO_DOMAIN", "")
+
+# Initialize Cognito client
+_cognito_client = None
+
+def get_cognito_client():
+    """Get or create Cognito Identity Provider client."""
+    global _cognito_client
+    if _cognito_client is None:
+        _cognito_client = boto3.client(
+            "cognito-idp",
+            region_name=COGNITO_REGION
+        )
+    return _cognito_client
 
 # JWKS cache
 _jwks_cache = None
@@ -47,6 +64,7 @@ PUBLIC_ROUTES = {
     "/register",
     "/auth/callback",
     "/auth/logout",
+    "/auth/register",
     "/api/health",
     "/static",
 }
@@ -467,3 +485,305 @@ def ensure_user_in_db(user: dict, db_connection) -> Optional[int]:
         print(f"Error ensuring user in database: {e}")
         db_connection.rollback()
         return None
+
+
+# ============================================================================
+# PASSWORD VALIDATION
+# ============================================================================
+
+def validate_password_strength(password: str) -> Tuple[bool, List[str]]:
+    """
+    Validate password meets HIPAA-compliant strength requirements.
+
+    Requirements:
+    - At least 12 characters
+    - At least one uppercase letter
+    - At least one lowercase letter
+    - At least one number
+    - At least one special character
+
+    Returns:
+        Tuple of (is_valid, list_of_error_messages)
+    """
+    errors = []
+
+    if len(password) < 12:
+        errors.append("Password must be at least 12 characters long")
+
+    if not re.search(r"[A-Z]", password):
+        errors.append("Password must contain at least one uppercase letter")
+
+    if not re.search(r"[a-z]", password):
+        errors.append("Password must contain at least one lowercase letter")
+
+    if not re.search(r"[0-9]", password):
+        errors.append("Password must contain at least one number")
+
+    if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>/?]", password):
+        errors.append("Password must contain at least one special character (!@#$%^&*)")
+
+    return (len(errors) == 0, errors)
+
+
+# ============================================================================
+# REGISTRATION DATA VALIDATION
+# ============================================================================
+
+def validate_email(email: str) -> bool:
+    """Validate email format."""
+    if not email:
+        return False
+    pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
+    return bool(re.match(pattern, email))
+
+
+def validate_phone(phone: str) -> bool:
+    """
+    Validate phone number format.
+    Expects E.164 format or at least 10 digits.
+    """
+    if not phone:
+        return False
+    # Remove all non-digit characters except +
+    cleaned = re.sub(r"[^\d+]", "", phone)
+    # Check for E.164 format or at least 10 digits
+    if cleaned.startswith("+"):
+        return len(cleaned) >= 11  # + and at least 10 digits
+    return len(cleaned) >= 10
+
+
+def normalize_phone(phone: str) -> str:
+    """
+    Normalize phone number to E.164 format.
+    Assumes US number if no country code provided.
+    """
+    # Remove all non-digit characters except +
+    cleaned = re.sub(r"[^\d+]", "", phone)
+
+    if cleaned.startswith("+"):
+        return cleaned
+
+    # Assume US number if no country code
+    if len(cleaned) == 10:
+        return f"+1{cleaned}"
+    elif len(cleaned) == 11 and cleaned.startswith("1"):
+        return f"+{cleaned}"
+
+    return f"+{cleaned}"
+
+
+def validate_registration_data(form_data: dict) -> Tuple[bool, dict]:
+    """
+    Validate all registration form data.
+
+    Args:
+        form_data: Dictionary containing form field values
+
+    Returns:
+        Tuple of (is_valid, errors_dict)
+        errors_dict maps field names to error messages
+    """
+    errors = {}
+
+    # Required text fields
+    required_fields = {
+        "first_name": "First name is required",
+        "last_name": "Last name is required",
+        "street_address": "Street address is required",
+        "city": "City is required",
+        "state": "State/Province is required",
+        "postal_code": "ZIP/Postal code is required",
+        "country": "Country is required",
+    }
+
+    for field, message in required_fields.items():
+        value = form_data.get(field, "").strip()
+        if not value:
+            errors[field] = message
+
+    # Validate contact method (email or phone required)
+    primary_contact = form_data.get("primary_contact", "email")
+
+    if primary_contact == "email":
+        email = form_data.get("email", "").strip()
+        if not email:
+            errors["email"] = "Email address is required"
+        elif not validate_email(email):
+            errors["email"] = "Please enter a valid email address"
+    else:
+        phone = form_data.get("phone", "").strip()
+        if not phone:
+            errors["phone"] = "Phone number is required"
+        elif not validate_phone(phone):
+            errors["phone"] = "Please enter a valid phone number"
+
+    # Validate password
+    password = form_data.get("password", "")
+    confirm_password = form_data.get("confirm_password", "")
+
+    if not password:
+        errors["password"] = "Password is required"
+    else:
+        is_strong, pw_errors = validate_password_strength(password)
+        if not is_strong:
+            errors["password"] = pw_errors[0]  # Show first error
+
+    if password and password != confirm_password:
+        errors["confirm_password"] = "Passwords do not match"
+
+    # Validate consent checkboxes
+    if not form_data.get("terms_accepted"):
+        errors["terms_accepted"] = "You must agree to the Terms of Service"
+
+    if not form_data.get("hipaa_acknowledged"):
+        errors["hipaa_acknowledged"] = "You must acknowledge HIPAA compliance requirements"
+
+    return (len(errors) == 0, errors)
+
+
+# ============================================================================
+# COGNITO USER CREATION
+# ============================================================================
+
+def create_cognito_user(
+    username: str,
+    password: str,
+    email: Optional[str] = None,
+    phone: Optional[str] = None,
+    first_name: Optional[str] = None,
+    last_name: Optional[str] = None,
+) -> Tuple[bool, Optional[str], Optional[str]]:
+    """
+    Create a new user in Cognito User Pool.
+
+    Args:
+        username: The username (typically email or phone)
+        password: The user's password
+        email: Optional email address
+        phone: Optional phone number (E.164 format)
+        first_name: User's first name
+        last_name: User's last name
+
+    Returns:
+        Tuple of (success, user_sub, error_message)
+        - success: True if user was created
+        - user_sub: The Cognito user sub (UUID) if successful
+        - error_message: Error description if failed
+    """
+    if not COGNITO_USER_POOL_ID or not COGNITO_CLIENT_ID:
+        return (False, None, "Cognito is not configured")
+
+    client = get_cognito_client()
+
+    # Build user attributes
+    user_attributes = []
+
+    if email:
+        user_attributes.append({
+            "Name": "email",
+            "Value": email
+        })
+
+    if phone:
+        normalized_phone = normalize_phone(phone)
+        user_attributes.append({
+            "Name": "phone_number",
+            "Value": normalized_phone
+        })
+
+    if first_name:
+        user_attributes.append({
+            "Name": "given_name",
+            "Value": first_name
+        })
+
+    if last_name:
+        user_attributes.append({
+            "Name": "family_name",
+            "Value": last_name
+        })
+
+    # Combine first and last name for the name attribute
+    if first_name or last_name:
+        full_name = f"{first_name or ''} {last_name or ''}".strip()
+        user_attributes.append({
+            "Name": "name",
+            "Value": full_name
+        })
+
+    try:
+        # Use SignUp API for self-registration
+        response = client.sign_up(
+            ClientId=COGNITO_CLIENT_ID,
+            Username=username,
+            Password=password,
+            UserAttributes=user_attributes,
+        )
+
+        user_sub = response.get("UserSub")
+        print(f"REGISTRATION: User created successfully: {username} (sub: {user_sub})")
+
+        return (True, user_sub, None)
+
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "Unknown")
+        error_message = e.response.get("Error", {}).get("Message", str(e))
+
+        print(f"REGISTRATION ERROR: {error_code} - {error_message}")
+
+        # Map Cognito errors to user-friendly messages
+        if error_code == "UsernameExistsException":
+            return (False, None, "An account with this email or phone already exists")
+        elif error_code == "InvalidPasswordException":
+            return (False, None, "Password does not meet requirements")
+        elif error_code == "InvalidParameterException":
+            if "phone" in error_message.lower():
+                return (False, None, "Invalid phone number format. Please use format: +1234567890")
+            elif "email" in error_message.lower():
+                return (False, None, "Invalid email address format")
+            return (False, None, f"Invalid input: {error_message}")
+        elif error_code == "CodeDeliveryFailureException":
+            return (False, None, "Failed to send verification code. Please check your email/phone.")
+        else:
+            return (False, None, f"Registration failed: {error_message}")
+
+    except Exception as e:
+        print(f"REGISTRATION ERROR: Unexpected error - {e}")
+        return (False, None, "An unexpected error occurred during registration")
+
+
+def resend_confirmation_code(username: str) -> Tuple[bool, Optional[str]]:
+    """
+    Resend the confirmation code to a user.
+
+    Args:
+        username: The username (email or phone)
+
+    Returns:
+        Tuple of (success, error_message)
+    """
+    if not COGNITO_CLIENT_ID:
+        return (False, "Cognito is not configured")
+
+    client = get_cognito_client()
+
+    try:
+        client.resend_confirmation_code(
+            ClientId=COGNITO_CLIENT_ID,
+            Username=username,
+        )
+        return (True, None)
+
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "Unknown")
+        error_message = e.response.get("Error", {}).get("Message", str(e))
+
+        if error_code == "UserNotFoundException":
+            return (False, "User not found")
+        elif error_code == "LimitExceededException":
+            return (False, "Too many attempts. Please try again later.")
+        else:
+            return (False, f"Failed to resend code: {error_message}")
+
+    except Exception as e:
+        return (False, f"Unexpected error: {e}")

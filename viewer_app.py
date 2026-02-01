@@ -15,6 +15,7 @@ import os
 import secrets
 import sqlite3
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from functools import lru_cache
 from urllib.parse import urljoin
@@ -42,6 +43,10 @@ from auth import (
     exchange_code_for_tokens,
     refresh_tokens,
     ensure_user_in_db,
+    validate_registration_data,
+    validate_password_strength,
+    create_cognito_user,
+    normalize_phone,
     COGNITO_CLIENT_ID,
     COGNITO_DOMAIN,
 )
@@ -150,6 +155,151 @@ def register():
         "register.html",
         signup_url=get_cognito_signup_url(get_callback_url()),
     )
+
+
+@app.route("/auth/register", methods=["POST"])
+def auth_register():
+    """Handle user registration form submission."""
+    # Collect form data
+    form_data = {
+        "first_name": request.form.get("first_name", "").strip(),
+        "last_name": request.form.get("last_name", "").strip(),
+        "email": request.form.get("email", "").strip(),
+        "phone": request.form.get("phone", "").strip(),
+        "primary_contact": request.form.get("primary_contact", "email"),
+        "secondary_email": request.form.get("secondary_email", "").strip(),
+        "secondary_phone": request.form.get("secondary_phone", "").strip(),
+        "password": request.form.get("password", ""),
+        "confirm_password": request.form.get("confirm_password", ""),
+        "street_address": request.form.get("street_address", "").strip(),
+        "city": request.form.get("city", "").strip(),
+        "state": request.form.get("state", "").strip(),
+        "postal_code": request.form.get("postal_code", "").strip(),
+        "country": request.form.get("country", "").strip(),
+        "terms_accepted": request.form.get("terms_accepted") == "on",
+        "hipaa_acknowledged": request.form.get("hipaa_acknowledged") == "on",
+    }
+
+    # Validate form data
+    is_valid, errors = validate_registration_data(form_data)
+
+    if not is_valid:
+        # Return to form with errors
+        error_message = ". ".join(errors.values())
+        return render_template(
+            "register.html",
+            error=error_message,
+            form_data=form_data,
+            signup_url=get_cognito_signup_url(get_callback_url()),
+        )
+
+    # Determine username and contact info for Cognito
+    primary_contact = form_data["primary_contact"]
+    if primary_contact == "email":
+        username = form_data["email"]
+        email = form_data["email"]
+        phone = form_data.get("secondary_phone") or None
+    else:
+        phone = form_data["phone"]
+        username = normalize_phone(phone)
+        email = form_data.get("secondary_email") or None
+
+    # Create user in Cognito
+    success, user_sub, error_message = create_cognito_user(
+        username=username,
+        password=form_data["password"],
+        email=email,
+        phone=phone if phone else None,
+        first_name=form_data["first_name"],
+        last_name=form_data["last_name"],
+    )
+
+    if not success:
+        return render_template(
+            "register.html",
+            error=error_message,
+            form_data=form_data,
+            signup_url=get_cognito_signup_url(get_callback_url()),
+        )
+
+    # Store user profile in local database
+    try:
+        store_user_profile(user_sub, form_data)
+    except Exception as e:
+        print(f"Warning: Failed to store user profile in database: {e}")
+        # Continue anyway - user was created in Cognito
+
+    # Redirect to login page with success message
+    # User needs to verify their email/phone before logging in
+    return render_template(
+        "register.html",
+        success=f"Account created successfully! Please check your {'email' if primary_contact == 'email' else 'phone'} for a verification code. After verifying, you can sign in and set up MFA.",
+        signup_url=get_cognito_signup_url(get_callback_url()),
+    )
+
+
+def store_user_profile(cognito_sub: str, form_data: dict) -> bool:
+    """
+    Store user profile data in the local database.
+
+    This stores additional HIPAA-required information that isn't stored in Cognito.
+    """
+    # For now, we'll use SQLite for local development
+    # In production, this would use PostgreSQL via RDS
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Check if users table has the new columns (for backwards compatibility)
+        # This is a simple check - in production, use proper migrations
+        cursor.execute("PRAGMA table_info(users)")
+        columns = [col[1] for col in cursor.fetchall()]
+
+        # If the new columns exist, insert with full profile
+        if "first_name" in columns:
+            cursor.execute("""
+                INSERT INTO users (
+                    cognito_sub, email, display_name, role,
+                    first_name, last_name, phone,
+                    street_address, city, state, postal_code, country,
+                    terms_accepted_at, hipaa_acknowledged_at,
+                    created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            """, (
+                cognito_sub,
+                form_data.get("email") or form_data.get("secondary_email"),
+                f"{form_data['first_name']} {form_data['last_name']}",
+                "viewer",  # Default role
+                form_data["first_name"],
+                form_data["last_name"],
+                form_data.get("phone") or form_data.get("secondary_phone"),
+                form_data["street_address"],
+                form_data["city"],
+                form_data["state"],
+                form_data["postal_code"],
+                form_data["country"],
+                datetime.utcnow().isoformat() if form_data.get("terms_accepted") else None,
+                datetime.utcnow().isoformat() if form_data.get("hipaa_acknowledged") else None,
+            ))
+        else:
+            # Fallback for older schema
+            cursor.execute("""
+                INSERT INTO users (cognito_sub, email, display_name, role)
+                VALUES (?, ?, ?, ?)
+            """, (
+                cognito_sub,
+                form_data.get("email") or form_data.get("secondary_email"),
+                f"{form_data['first_name']} {form_data['last_name']}",
+                "viewer",
+            ))
+
+        conn.commit()
+        conn.close()
+        return True
+
+    except Exception as e:
+        print(f"Error storing user profile: {e}")
+        return False
 
 
 @app.route("/auth/callback")
