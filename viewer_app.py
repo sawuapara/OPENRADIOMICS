@@ -39,12 +39,10 @@ from auth import (
     log_audit,
     get_cognito_login_url,
     get_cognito_logout_url,
-    get_cognito_signup_url,
     exchange_code_for_tokens,
     refresh_tokens,
     ensure_user_in_db,
     validate_registration_data,
-    validate_password_strength,
     create_cognito_user,
     normalize_phone,
     COGNITO_CLIENT_ID,
@@ -151,10 +149,7 @@ def register():
     if is_authenticated():
         return redirect(url_for("index"))
 
-    return render_template(
-        "register.html",
-        signup_url=get_cognito_signup_url(get_callback_url()),
-    )
+    return render_template("register.html")
 
 
 @app.route("/auth/register", methods=["POST"])
@@ -190,7 +185,6 @@ def auth_register():
             "register.html",
             error=error_message,
             form_data=form_data,
-            signup_url=get_cognito_signup_url(get_callback_url()),
         )
 
     # Determine username and contact info for Cognito
@@ -219,7 +213,6 @@ def auth_register():
             "register.html",
             error=error_message,
             form_data=form_data,
-            signup_url=get_cognito_signup_url(get_callback_url()),
         )
 
     # Store user profile in local database
@@ -234,7 +227,6 @@ def auth_register():
     return render_template(
         "register.html",
         success=f"Account created successfully! Please check your {'email' if primary_contact == 'email' else 'phone'} for a verification code. After verifying, you can sign in and set up MFA.",
-        signup_url=get_cognito_signup_url(get_callback_url()),
     )
 
 
