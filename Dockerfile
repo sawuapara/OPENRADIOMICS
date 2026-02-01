@@ -30,6 +30,7 @@ ENV PATH=/root/.local/bin:$PATH
 
 # Copy application code
 COPY viewer_app.py .
+COPY auth.py .
 COPY templates/ templates/
 
 # Create directory for local cache (optional)
