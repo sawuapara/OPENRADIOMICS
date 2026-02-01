@@ -4,6 +4,7 @@ OpenRadiomics - 3D Voxel MRI Viewer
 Flask Backend serving MRI volume data to Three.js frontend.
 
 Supports both local filesystem and S3 storage for DICOM files.
+HIPAA-compliant authentication via AWS Cognito.
 """
 
 from __future__ import annotations
@@ -11,16 +12,39 @@ from __future__ import annotations
 import io
 import json
 import os
+import secrets
 import sqlite3
 import tempfile
 from pathlib import Path
 from functools import lru_cache
+from urllib.parse import urljoin
 
 import numpy as np
 import pydicom
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request, redirect, url_for, make_response
 
 app = Flask(__name__)
+
+# Secret key for Flask sessions (set via environment variable in production)
+app.secret_key = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+
+# Import auth module
+from auth import (
+    get_current_user,
+    is_authenticated,
+    is_public_route,
+    requires_auth,
+    requires_role,
+    log_audit,
+    get_cognito_login_url,
+    get_cognito_logout_url,
+    get_cognito_signup_url,
+    exchange_code_for_tokens,
+    refresh_tokens,
+    ensure_user_in_db,
+    COGNITO_CLIENT_ID,
+    COGNITO_DOMAIN,
+)
 
 # Configuration
 BASE_DIR = Path(__file__).parent
@@ -46,6 +70,228 @@ volume_cache = {}
 # Local cache directory for S3 files
 CACHE_DIR = Path(tempfile.gettempdir()) / "dicom_cache"
 CACHE_DIR.mkdir(exist_ok=True)
+
+# Auth configuration
+AUTH_ENABLED = bool(os.environ.get("COGNITO_USER_POOL_ID"))
+
+
+def get_callback_url():
+    """Get the OAuth callback URL based on the request."""
+    # Use X-Forwarded headers if behind a proxy/load balancer
+    scheme = request.headers.get("X-Forwarded-Proto", request.scheme)
+    host = request.headers.get("X-Forwarded-Host", request.host)
+    return f"{scheme}://{host}/auth/callback"
+
+
+def get_base_url():
+    """Get the base URL for redirects."""
+    scheme = request.headers.get("X-Forwarded-Proto", request.scheme)
+    host = request.headers.get("X-Forwarded-Host", request.host)
+    return f"{scheme}://{host}"
+
+
+# ============================================================================
+# AUTHENTICATION MIDDLEWARE
+# ============================================================================
+
+@app.before_request
+def check_authentication():
+    """Check authentication before each request."""
+    # Skip auth check if Cognito is not configured
+    if not AUTH_ENABLED:
+        return None
+
+    # Allow public routes
+    if is_public_route(request.path):
+        return None
+
+    # Allow static files
+    if request.path.startswith("/static/"):
+        return None
+
+    # Check if authenticated
+    if not is_authenticated():
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Authentication required", "code": "AUTH_REQUIRED"}), 401
+        return redirect(url_for("login"))
+
+    return None
+
+
+# ============================================================================
+# AUTHENTICATION ROUTES
+# ============================================================================
+
+@app.route("/login")
+def login():
+    """Render the login page."""
+    # If already authenticated, redirect to home
+    if is_authenticated():
+        return redirect(url_for("index"))
+
+    # Pass Cognito config to template
+    return render_template(
+        "login.html",
+        cognito_domain=COGNITO_DOMAIN,
+        client_id=COGNITO_CLIENT_ID,
+        callback_url=get_callback_url(),
+    )
+
+
+@app.route("/register")
+def register():
+    """Render the registration page."""
+    # If already authenticated, redirect to home
+    if is_authenticated():
+        return redirect(url_for("index"))
+
+    return render_template(
+        "register.html",
+        signup_url=get_cognito_signup_url(get_callback_url()),
+    )
+
+
+@app.route("/auth/callback")
+def auth_callback():
+    """Handle OAuth callback from Cognito."""
+    code = request.args.get("code")
+    error = request.args.get("error")
+    error_description = request.args.get("error_description")
+
+    if error:
+        return render_template(
+            "login.html",
+            error=error_description or error,
+            cognito_domain=COGNITO_DOMAIN,
+            client_id=COGNITO_CLIENT_ID,
+            callback_url=get_callback_url(),
+        )
+
+    if not code:
+        return redirect(url_for("login"))
+
+    # Exchange code for tokens
+    tokens = exchange_code_for_tokens(code, get_callback_url())
+    if not tokens:
+        return render_template(
+            "login.html",
+            error="Failed to authenticate. Please try again.",
+            cognito_domain=COGNITO_DOMAIN,
+            client_id=COGNITO_CLIENT_ID,
+            callback_url=get_callback_url(),
+        )
+
+    # Set cookies with tokens
+    response = make_response(redirect(url_for("index")))
+
+    # Access token cookie (short-lived, used for API calls)
+    response.set_cookie(
+        "access_token",
+        tokens.get("access_token", ""),
+        httponly=True,
+        secure=request.scheme == "https",
+        samesite="Lax",
+        max_age=900,  # 15 minutes
+    )
+
+    # ID token cookie (contains user info)
+    response.set_cookie(
+        "id_token",
+        tokens.get("id_token", ""),
+        httponly=True,
+        secure=request.scheme == "https",
+        samesite="Lax",
+        max_age=900,
+    )
+
+    # Refresh token cookie (longer-lived, used to get new access tokens)
+    response.set_cookie(
+        "refresh_token",
+        tokens.get("refresh_token", ""),
+        httponly=True,
+        secure=request.scheme == "https",
+        samesite="Lax",
+        max_age=28800,  # 8 hours
+    )
+
+    # Log the login event
+    # Note: We can't easily log to DB here without the user context
+    print(f"LOGIN: User authenticated successfully")
+
+    return response
+
+
+@app.route("/auth/logout")
+def auth_logout():
+    """Log out the user."""
+    # Clear cookies
+    response = make_response(redirect(url_for("login")))
+    response.delete_cookie("access_token")
+    response.delete_cookie("id_token")
+    response.delete_cookie("refresh_token")
+
+    # If Cognito is configured, redirect to Cognito logout
+    if COGNITO_DOMAIN:
+        logout_url = get_cognito_logout_url(f"{get_base_url()}/login")
+        response = make_response(redirect(logout_url))
+        response.delete_cookie("access_token")
+        response.delete_cookie("id_token")
+        response.delete_cookie("refresh_token")
+
+    return response
+
+
+@app.route("/auth/refresh", methods=["POST"])
+def auth_refresh():
+    """Refresh the access token using the refresh token."""
+    refresh_token_value = request.cookies.get("refresh_token")
+
+    if not refresh_token_value:
+        return jsonify({"error": "No refresh token"}), 401
+
+    tokens = refresh_tokens(refresh_token_value)
+    if not tokens:
+        return jsonify({"error": "Token refresh failed"}), 401
+
+    response = make_response(jsonify({"success": True}))
+
+    # Update access token cookie
+    response.set_cookie(
+        "access_token",
+        tokens.get("access_token", ""),
+        httponly=True,
+        secure=request.scheme == "https",
+        samesite="Lax",
+        max_age=900,
+    )
+
+    # Update ID token if provided
+    if tokens.get("id_token"):
+        response.set_cookie(
+            "id_token",
+            tokens.get("id_token", ""),
+            httponly=True,
+            secure=request.scheme == "https",
+            samesite="Lax",
+            max_age=900,
+        )
+
+    return response
+
+
+@app.route("/api/auth/user")
+def get_user_info():
+    """Get the current authenticated user's information."""
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    return jsonify({
+        "email": user.get("email"),
+        "name": user.get("name"),
+        "role": user.get("role"),
+        "groups": user.get("groups", []),
+    })
 
 
 def get_db_connection():

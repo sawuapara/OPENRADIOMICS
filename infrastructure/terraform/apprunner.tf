@@ -1,5 +1,12 @@
 # OpenRadiomics - AWS App Runner Configuration
 
+# Generate a secure random secret key for Flask sessions
+resource "random_password" "flask_secret" {
+  length           = 64
+  special          = true
+  override_special = "!@#$%&*-_=+"
+}
+
 # App Runner service
 resource "aws_apprunner_service" "app" {
   service_name = "${var.project_name}-${var.environment}"
@@ -13,9 +20,15 @@ resource "aws_apprunner_service" "app" {
       image_configuration {
         port = "5000"
         runtime_environment_variables = {
-          ENVIRONMENT    = var.environment
-          S3_BUCKET_NAME = aws_s3_bucket.dicom.bucket
-          AWS_REGION     = var.aws_region
+          ENVIRONMENT          = var.environment
+          S3_BUCKET_NAME       = aws_s3_bucket.dicom.bucket
+          AWS_REGION           = var.aws_region
+          # Cognito authentication
+          COGNITO_USER_POOL_ID = aws_cognito_user_pool.main.id
+          COGNITO_CLIENT_ID    = aws_cognito_user_pool_client.web.id
+          COGNITO_DOMAIN       = "${aws_cognito_user_pool_domain.main.domain}.auth.${var.aws_region}.amazoncognito.com"
+          # Flask secret key for sessions (generate a secure value in production)
+          SECRET_KEY           = random_password.flask_secret.result
           # Database connection will be added when RDS is deployed
           # DATABASE_URL = "postgresql://${var.db_username}:${var.db_password}@${aws_db_instance.postgres.endpoint}/${var.db_name}"
         }

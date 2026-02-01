@@ -140,6 +140,90 @@
             margin-right: 15px;
         }
 
+        /* User menu and logout */
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-right: 15px;
+        }
+        .user-info {
+            font-size: 12px;
+            color: #888;
+        }
+        .user-info .user-name {
+            color: #4fc3f7;
+            font-weight: 500;
+        }
+        .logout-btn {
+            padding: 6px 12px;
+            background: transparent;
+            border: 1px solid #444;
+            border-radius: 5px;
+            color: #888;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .logout-btn:hover {
+            border-color: #ff6b6b;
+            color: #ff6b6b;
+        }
+        /* Session timeout warning modal */
+        .timeout-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+        }
+        .timeout-modal.visible {
+            display: flex;
+        }
+        .timeout-modal-content {
+            background: #1a1a2e;
+            border: 1px solid #4fc3f7;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 400px;
+            text-align: center;
+        }
+        .timeout-modal h2 {
+            color: #4fc3f7;
+            margin-bottom: 15px;
+        }
+        .timeout-modal p {
+            color: #aaa;
+            margin-bottom: 20px;
+        }
+        .timeout-modal .countdown {
+            font-size: 24px;
+            color: #ff6b6b;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .timeout-modal button {
+            padding: 10px 25px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+        .timeout-modal .stay-btn {
+            background: #4fc3f7;
+            color: #000;
+        }
+        .timeout-modal .logout-btn-modal {
+            background: #444;
+            color: #fff;
+        }
+
         /* Main Content Area */
         #main-content {
             width: 100%;
@@ -741,7 +825,26 @@
                Star
             </a>
         </div>
+        <div class="user-menu" id="user-menu" style="display: none;">
+            <span class="user-info">
+                <span class="user-name" id="user-name"></span>
+            </span>
+            <button class="logout-btn" id="logout-btn" title="Sign out">Logout</button>
+        </div>
         <span id="status-text"></span>
+    </div>
+
+    <!-- Session Timeout Warning Modal -->
+    <div class="timeout-modal" id="timeout-modal">
+        <div class="timeout-modal-content">
+            <h2>Session Expiring</h2>
+            <p>Your session will expire due to inactivity.</p>
+            <div class="countdown" id="timeout-countdown">60</div>
+            <div>
+                <button class="stay-btn" id="stay-logged-in">Stay Logged In</button>
+                <button class="logout-btn-modal" id="logout-now">Logout Now</button>
+            </div>
+        </div>
     </div>
 
     <!-- Main Content Area -->
@@ -1007,6 +1110,211 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
         console.log('OpenRadiomics Viewer - Three.js:', THREE.REVISION);
+
+        // ========================================
+        // AUTHENTICATION MODULE
+        // ========================================
+
+        const Auth = {
+            // Token refresh interval (14 minutes - before 15 min expiry)
+            REFRESH_INTERVAL: 14 * 60 * 1000,
+            // Inactivity timeout (15 minutes)
+            INACTIVITY_TIMEOUT: 15 * 60 * 1000,
+            // Warning before timeout (60 seconds)
+            WARNING_BEFORE_TIMEOUT: 60 * 1000,
+
+            refreshTimer: null,
+            inactivityTimer: null,
+            warningTimer: null,
+            countdownInterval: null,
+            lastActivity: Date.now(),
+            user: null,
+
+            async init() {
+                // Fetch user info
+                try {
+                    const response = await fetch('/api/auth/user');
+                    if (response.ok) {
+                        this.user = await response.json();
+                        this.showUserMenu();
+                        this.startTokenRefresh();
+                        this.startInactivityMonitor();
+                        console.log('Auth: User authenticated:', this.user.email);
+                    } else if (response.status === 401) {
+                        // Not authenticated - auth middleware will handle redirect
+                        console.log('Auth: Not authenticated');
+                    }
+                } catch (error) {
+                    console.error('Auth: Error fetching user info:', error);
+                }
+            },
+
+            showUserMenu() {
+                const userMenu = document.getElementById('user-menu');
+                const userName = document.getElementById('user-name');
+                const logoutBtn = document.getElementById('logout-btn');
+
+                if (userMenu && this.user) {
+                    userName.textContent = this.user.name || this.user.email;
+                    userMenu.style.display = 'flex';
+
+                    logoutBtn.addEventListener('click', () => this.logout());
+                }
+            },
+
+            startTokenRefresh() {
+                // Clear existing timer
+                if (this.refreshTimer) {
+                    clearInterval(this.refreshTimer);
+                }
+
+                // Refresh tokens every 14 minutes
+                this.refreshTimer = setInterval(() => {
+                    this.refreshTokens();
+                }, this.REFRESH_INTERVAL);
+
+                console.log('Auth: Token refresh scheduled');
+            },
+
+            async refreshTokens() {
+                try {
+                    const response = await fetch('/auth/refresh', {
+                        method: 'POST',
+                        credentials: 'same-origin'
+                    });
+
+                    if (response.ok) {
+                        console.log('Auth: Tokens refreshed');
+                        this.resetInactivityTimer();
+                    } else {
+                        console.warn('Auth: Token refresh failed, redirecting to login');
+                        this.redirectToLogin();
+                    }
+                } catch (error) {
+                    console.error('Auth: Token refresh error:', error);
+                }
+            },
+
+            startInactivityMonitor() {
+                // Track user activity
+                const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
+                activityEvents.forEach(event => {
+                    document.addEventListener(event, () => this.recordActivity(), { passive: true });
+                });
+
+                this.resetInactivityTimer();
+                console.log('Auth: Inactivity monitor started');
+            },
+
+            recordActivity() {
+                this.lastActivity = Date.now();
+
+                // Hide timeout warning if showing
+                const modal = document.getElementById('timeout-modal');
+                if (modal && modal.classList.contains('visible')) {
+                    this.hideTimeoutWarning();
+                    this.refreshTokens();
+                }
+            },
+
+            resetInactivityTimer() {
+                // Clear existing timers
+                if (this.inactivityTimer) clearTimeout(this.inactivityTimer);
+                if (this.warningTimer) clearTimeout(this.warningTimer);
+
+                // Set warning timer (fires 60 seconds before timeout)
+                this.warningTimer = setTimeout(() => {
+                    this.showTimeoutWarning();
+                }, this.INACTIVITY_TIMEOUT - this.WARNING_BEFORE_TIMEOUT);
+
+                // Set logout timer
+                this.inactivityTimer = setTimeout(() => {
+                    this.logout();
+                }, this.INACTIVITY_TIMEOUT);
+            },
+
+            showTimeoutWarning() {
+                const modal = document.getElementById('timeout-modal');
+                const countdown = document.getElementById('timeout-countdown');
+                const stayBtn = document.getElementById('stay-logged-in');
+                const logoutBtn = document.getElementById('logout-now');
+
+                if (!modal) return;
+
+                modal.classList.add('visible');
+
+                let secondsLeft = 60;
+                countdown.textContent = secondsLeft;
+
+                // Start countdown
+                this.countdownInterval = setInterval(() => {
+                    secondsLeft--;
+                    countdown.textContent = secondsLeft;
+                    if (secondsLeft <= 0) {
+                        clearInterval(this.countdownInterval);
+                    }
+                }, 1000);
+
+                // Handle buttons
+                stayBtn.onclick = () => {
+                    this.hideTimeoutWarning();
+                    this.refreshTokens();
+                };
+
+                logoutBtn.onclick = () => {
+                    this.logout();
+                };
+            },
+
+            hideTimeoutWarning() {
+                const modal = document.getElementById('timeout-modal');
+                if (modal) {
+                    modal.classList.remove('visible');
+                }
+                if (this.countdownInterval) {
+                    clearInterval(this.countdownInterval);
+                }
+                this.resetInactivityTimer();
+            },
+
+            logout() {
+                // Clear timers
+                if (this.refreshTimer) clearInterval(this.refreshTimer);
+                if (this.inactivityTimer) clearTimeout(this.inactivityTimer);
+                if (this.warningTimer) clearTimeout(this.warningTimer);
+                if (this.countdownInterval) clearInterval(this.countdownInterval);
+
+                // Redirect to logout
+                window.location.href = '/auth/logout';
+            },
+
+            redirectToLogin() {
+                window.location.href = '/login';
+            },
+
+            // Handle 401 responses globally
+            handleUnauthorized() {
+                console.warn('Auth: Received 401, redirecting to login');
+                this.redirectToLogin();
+            }
+        };
+
+        // Initialize auth
+        Auth.init();
+
+        // Intercept fetch to handle 401 responses
+        const originalFetch = window.fetch;
+        window.fetch = async function(...args) {
+            const response = await originalFetch.apply(this, args);
+            if (response.status === 401) {
+                const url = args[0];
+                // Don't redirect for auth endpoints
+                if (typeof url === 'string' && !url.includes('/auth/') && !url.includes('/login')) {
+                    Auth.handleUnauthorized();
+                }
+            }
+            return response;
+        };
 
         // ========================================
         // SETTINGS STORAGE (must be defined first)

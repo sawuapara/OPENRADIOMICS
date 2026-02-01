@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In - OpenRadiomics</title>
+    <link rel="icon" href="data:,">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            padding: 40px;
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .logo h1 {
+            font-size: 28px;
+            color: #4fc3f7;
+            letter-spacing: 2px;
+        }
+        .logo p {
+            color: #888;
+            margin-top: 8px;
+            font-size: 14px;
+        }
+        .login-card {
+            background: #0d0d1a;
+            border-radius: 12px;
+            padding: 40px;
+            border: 1px solid #333;
+        }
+        .login-card h2 {
+            font-size: 22px;
+            margin-bottom: 8px;
+            color: #fff;
+        }
+        .login-card p.subtitle {
+            color: #888;
+            font-size: 14px;
+            margin-bottom: 30px;
+        }
+        .error-message {
+            background: rgba(220, 53, 69, 0.1);
+            border: 1px solid #dc3545;
+            border-radius: 8px;
+            padding: 12px 15px;
+            margin-bottom: 20px;
+            color: #ff6b6b;
+            font-size: 14px;
+        }
+        .sign-in-btn {
+            width: 100%;
+            padding: 14px 20px;
+            background: #4fc3f7;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .sign-in-btn:hover {
+            background: #81d4fa;
+        }
+        .sign-in-btn:active {
+            transform: scale(0.98);
+        }
+        .sign-in-btn svg {
+            width: 20px;
+            height: 20px;
+        }
+        .divider {
+            display: flex;
+            align-items: center;
+            margin: 25px 0;
+        }
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #333;
+        }
+        .divider span {
+            padding: 0 15px;
+            color: #666;
+            font-size: 13px;
+        }
+        .register-link {
+            text-align: center;
+        }
+        .register-link a {
+            color: #4fc3f7;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .register-link a:hover {
+            text-decoration: underline;
+        }
+        .hipaa-notice {
+            margin-top: 30px;
+            padding: 15px;
+            background: rgba(79, 195, 247, 0.1);
+            border-radius: 8px;
+            border: 1px solid rgba(79, 195, 247, 0.2);
+        }
+        .hipaa-notice h3 {
+            font-size: 13px;
+            color: #4fc3f7;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .hipaa-notice h3 svg {
+            width: 16px;
+            height: 16px;
+        }
+        .hipaa-notice ul {
+            list-style: none;
+            font-size: 12px;
+            color: #aaa;
+        }
+        .hipaa-notice li {
+            margin-bottom: 4px;
+            padding-left: 16px;
+            position: relative;
+        }
+        .hipaa-notice li::before {
+            content: '\2713';
+            position: absolute;
+            left: 0;
+            color: #4fc3f7;
+        }
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            color: #666;
+            font-size: 12px;
+        }
+        .footer a {
+            color: #888;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            color: #4fc3f7;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">
+            <h1>OPENRADIOMICS</h1>
+            <p>Medical Imaging Viewer</p>
+        </div>
+
+        <div class="login-card">
+            <h2>Welcome back</h2>
+            <p class="subtitle">Sign in to access your studies</p>
+
+            {% if error %}
+            <div class="error-message">
+                {{ error }}
+            </div>
+            {% endif %}
+
+            <a href="https://{{ cognito_domain }}/login?client_id={{ client_id }}&response_type=code&scope=email+openid+profile&redirect_uri={{ callback_url }}" class="sign-in-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                </svg>
+                Sign In with Email
+            </a>
+
+            <div class="divider">
+                <span>or</span>
+            </div>
+
+            <div class="register-link">
+                <a href="{{ url_for('register') }}">Create a new account</a>
+            </div>
+
+            <div class="hipaa-notice">
+                <h3>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/>
+                    </svg>
+                    HIPAA Compliant Security
+                </h3>
+                <ul>
+                    <li>Multi-factor authentication required</li>
+                    <li>Sessions expire after 15 minutes of inactivity</li>
+                    <li>All access is logged for audit purposes</li>
+                    <li>End-to-end encryption in transit</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>&copy; 2024 OpenRadiomics &bull; <a href="https://github.com/sawuapara/OPENRADIOMICS">GitHub</a></p>
+        </div>
+    </div>
+</body>
+</html>

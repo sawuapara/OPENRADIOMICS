@@ -97,3 +97,29 @@ output "app_runner_service_arn" {
   description = "App Runner service ARN"
   value       = aws_apprunner_service.app.arn
 }
+
+# Cognito outputs
+output "cognito_user_pool_id" {
+  description = "Cognito User Pool ID"
+  value       = aws_cognito_user_pool.main.id
+}
+
+output "cognito_user_pool_arn" {
+  description = "Cognito User Pool ARN"
+  value       = aws_cognito_user_pool.main.arn
+}
+
+output "cognito_client_id" {
+  description = "Cognito App Client ID"
+  value       = aws_cognito_user_pool_client.web.id
+}
+
+output "cognito_domain" {
+  description = "Cognito hosted UI domain"
+  value       = "${aws_cognito_user_pool_domain.main.domain}.auth.${var.aws_region}.amazoncognito.com"
+}
+
+output "cognito_login_url" {
+  description = "Cognito hosted UI login URL"
+  value       = "https://${aws_cognito_user_pool_domain.main.domain}.auth.${var.aws_region}.amazoncognito.com/login?client_id=${aws_cognito_user_pool_client.web.id}&response_type=code&scope=email+openid+profile&redirect_uri=https://${aws_apprunner_service.app.service_url}/auth/callback"
+}

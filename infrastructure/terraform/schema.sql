@@ -317,6 +317,44 @@ CREATE INDEX idx_analysis_type ON analysis_results(analysis_type);
 CREATE INDEX idx_analysis_status ON analysis_results(status);
 
 -- ============================================================================
+-- AUDIT LOG TABLE (HIPAA Compliance)
+-- ============================================================================
+
+-- Audit log for tracking all access to the system
+CREATE TABLE audit_log (
+    id              BIGSERIAL PRIMARY KEY,
+    timestamp       TIMESTAMPTZ DEFAULT NOW(),
+    user_id         INTEGER REFERENCES users(id),
+    action          VARCHAR(100) NOT NULL,       -- 'login', 'logout', 'view_study', 'download', etc.
+    resource_type   VARCHAR(50),                 -- 'study', 'series', 'instance', 'user', etc.
+    resource_id     VARCHAR(255),                -- ID of the resource accessed
+    ip_address      INET,                        -- Client IP address
+    request_path    VARCHAR(500),                -- HTTP request path
+    response_status INTEGER                      -- HTTP response status code
+);
+
+-- Indexes for efficient querying
+CREATE INDEX idx_audit_log_timestamp ON audit_log(timestamp DESC);
+CREATE INDEX idx_audit_log_user ON audit_log(user_id);
+CREATE INDEX idx_audit_log_action ON audit_log(action);
+CREATE INDEX idx_audit_log_resource ON audit_log(resource_type, resource_id);
+
+-- Partition by month for better performance (optional, for high-volume systems)
+-- This creates a partitioned table - uncomment if needed
+-- CREATE TABLE audit_log (
+--     id              BIGSERIAL,
+--     timestamp       TIMESTAMPTZ DEFAULT NOW(),
+--     user_id         INTEGER REFERENCES users(id),
+--     action          VARCHAR(100) NOT NULL,
+--     resource_type   VARCHAR(50),
+--     resource_id     VARCHAR(255),
+--     ip_address      INET,
+--     request_path    VARCHAR(500),
+--     response_status INTEGER,
+--     PRIMARY KEY (id, timestamp)
+-- ) PARTITION BY RANGE (timestamp);
+
+-- ============================================================================
 -- TRIGGER FOR updated_at
 -- ============================================================================
 
@@ -363,3 +401,4 @@ CREATE TABLE schema_version (
 );
 
 INSERT INTO schema_version (version, description) VALUES (1, 'Initial schema - OpenRadiomics normalized DICOM database');
+INSERT INTO schema_version (version, description) VALUES (2, 'Add audit_log table for HIPAA compliance');
